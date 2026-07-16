@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Server Activity — Channel Stats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #171310;
+    --bg-panel: #221b15;
+    --bg-panel-raised: #2b221a;
+    --border: #4a3b28;
+    --gold: #c8a032;
+    --gold-bright: #e8c15a;
+    --teal: #4f7a6b;
+    --ember: #9a5240;
+    --text: #ece1c8;
+    --text-muted: #a89a7c;
+    --radius: 3px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(ellipse at top, #201811 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    padding: 0 0 64px 0;
+  }
+
+  header {
+    padding: 40px 24px 20px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(200,160,50,0.06), transparent);
+  }
+
+  header h1 {
+    font-family: 'Cinzel', serif;
+    font-weight: 700;
+    font-size: 2rem;
+    letter-spacing: 0.04em;
+    margin: 0 0 6px;
+    color: var(--gold-bright);
+    text-shadow: 0 2px 0 rgba(0,0,0,0.4);
+  }
+
+  header p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin: 0;
+  }
+
+  .tabs {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin: 28px auto 0;
+    max-width: 900px;
+    padding: 0 16px;
+    flex-wrap: wrap;
+  }
+
+  .tab-btn {
+    font-family: 'Cinzel', serif;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    background: linear-gradient(180deg, var(--bg-panel-raised), var(--bg-panel));
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 2px 4px rgba(0,0,0,0.3);
+  }
+
+  .tab-btn:hover {
+    color: var(--text);
+    border-color: var(--gold);
+  }
+
+  .tab-btn.active {
+    color: var(--bg);
+    background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+    border-color: var(--gold-bright);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 8px rgba(200,160,50,0.35);
+  }
+
+  main {
+    max-width: 1100px;
+    margin: 32px auto 0;
+    padding: 0 24px;
+  }
+
+  .panel {
+    display: none;
+  }
+  .panel.active {
+    display: block;
+    animation: fadein 0.25s ease;
+  }
+
+  @keyframes fadein {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+
+  .stat-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+
+  .stat-card .label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+
+  .stat-card .value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1.4rem;
+    color: var(--gold-bright);
+    font-weight: 600;
+  }
+
+  .stat-card .sub {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  section.block {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+
+  section.block h2 {
+    font-family: 'Cinzel', serif;
+    font-size: 1.05rem;
+    color: var(--gold-bright);
+    margin: 0 0 16px;
+    letter-spacing: 0.02em;
+  }
+
+  .bar-row {
+    display: grid;
+    grid-template-columns: 190px 1fr 70px;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 0.82rem;
+  }
+
+  .bar-row .bname {
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .bar-track {
+    height: 16px;
+    background: #120e0b;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .bar-fill {
+    height: 100%;
+    background: linear-gradient(180deg, var(--gold-bright), var(--gold) 60%, #96762a);
+    border-right: 1px solid rgba(0,0,0,0.3);
+  }
+
+  .bar-row .bcount {
+    font-family: 'IBM Plex Mono', monospace;
+    text-align: right;
+    color: var(--text-muted);
+  }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+
+  input[type="text"] {
+    background: #120e0b;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    flex: 1;
+    min-width: 200px;
+  }
+  input[type="text"]:focus {
+    outline: none;
+    border-color: var(--gold);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+
+  th, td {
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  th {
+    font-family: 'Cinzel', serif;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--gold-bright);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  th:hover { color: var(--text); }
+  th .arrow { opacity: 0.5; font-size: 0.7em; }
+
+  td { font-family: 'IBM Plex Mono', monospace; color: var(--text); }
+  td.name-cell { font-family: 'Inter', sans-serif; color: var(--text); }
+
+  tr.thread-row td.name-cell { padding-left: 26px; color: var(--text-muted); }
+  tr.total-row {
+    background: rgba(200,160,50,0.08);
+  }
+  tr.total-row td {
+    color: var(--gold-bright);
+    font-weight: 600;
+    border-top: 1px solid var(--gold);
+  }
+
+  tbody tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .table-scroll {
+    max-height: 520px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .table-scroll table { margin: 0; }
+  .table-scroll thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-panel-raised);
+    z-index: 1;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+  }
+  .empty-state code {
+    background: #120e0b;
+    padding: 2px 6px;
+    border-radius: 2px;
+    color: var(--gold-bright);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .lifespan-row {
+    display: grid;
+    grid-template-columns: 190px 1fr;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+    font-size: 0.78rem;
+  }
+  .lifespan-track {
+    position: relative;
+    height: 14px;
+    background: #120e0b;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+  }
+  .lifespan-bar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, var(--teal), #6ba090);
+    border-radius: 2px;
+  }
+  .lifespan-name {
+    font-family: 'IBM Plex Mono', monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  footer {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin-top: 40px;
+    padding: 0 24px;
+  }
+
+  canvas { max-width: 100%; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Server Activity Log</h1>
+  <p>Channel &amp; thread message stats — generated from server history</p>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="overview">Overview</button>
+  <button class="tab-btn" data-tab="threads">Channels &amp; Threads</button>
+  <button class="tab-btn" data-tab="trends">Activity Over Time</button>
+</div>
+
+<main>
+
+  <!-- OVERVIEW -->
+  <div class="panel active" id="panel-overview">
+    <div class="stat-row" id="overview-stats"></div>
+
+    <section class="block">
+      <h2>Top 20 by Message Count</h2>
+      <div id="top-bars"></div>
+    </section>
+
+    <section class="block">
+      <h2>All Channels &amp; Threads</h2>
+      <div class="controls">
+        <input type="text" id="search-overview" placeholder="Search channel or thread name...">
+      </div>
+      <div class="table-scroll">
+        <table id="overview-table">
+          <thead>
+            <tr>
+              <th data-key="name">Name <span class="arrow"></span></th>
+              <th data-key="total_messages">Messages <span class="arrow"></span></th>
+              <th data-key="unique_authors">Unique Authors <span class="arrow"></span></th>
+              <th data-key="first_message">First Message <span class="arrow"></span></th>
+              <th data-key="last_message">Last Message <span class="arrow"></span></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- THREADS / NESTED -->
+  <div class="panel" id="panel-threads">
+    <section class="block">
+      <h2>Channels with Threads Rolled In</h2>
+      <div class="controls">
+        <input type="text" id="search-nested" placeholder="Search channel or thread name...">
+      </div>
+      <div id="nested-container">
+        <div class="empty-state">Loading…</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- TRENDS -->
+  <div class="panel" id="panel-trends">
+    <section class="block">
+      <h2>Monthly Activity</h2>
+      <div id="trends-chart-container">
+        <div class="empty-state">Loading…</div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Channel Lifespan (first message → last message)</h2>
+      <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
+        A quick way to spot channels that went quiet a long time ago vs. ones still active today.
+      </p>
+      <div id="lifespan-container"></div>
+    </section>
+  </div>
+
+</main>
+
+<footer>
+  Data updates by replacing the CSV files in <code>/data</code> and re-pushing to GitHub.
+</footer>
+
+<script>
+// ---------------------------------------------------------------------
+// CSV parsing (handles quoted fields with embedded commas, e.g. thread
+// names like "Lets Count to 69,420")
+// ---------------------------------------------------------------------
+function parseCSV(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const next = text[i + 1];
+
+    if (inQuotes) {
+      if (c === '"' && next === '"') { field += '"'; i++; }
+      else if (c === '"') { inQuotes = false; }
+      else { field += c; }
+    } else {
+      if (c === '"') { inQuotes = true; }
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\r') { /* skip */ }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else { field += c; }
+    }
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+
+  const header = rows[0];
+  return rows.slice(1).filter(r => r.length === header.length && r.some(v => v !== ''))
+    .map(r => Object.fromEntries(header.map((h, idx) => [h, r[idx]])));
+}
+
+async function fetchCSV(path) {
+  try {
+    const res = await fetch(path);
+    if (!res.ok) return null;
+    const text = await res.text();
+    return parseCSV(text);
+  } catch (e) {
+    return null;
+  }
+}
+
+function fmt(n) {
+  return Number(n).toLocaleString();
+}
+
+function shortDate(iso) {
+  if (!iso) return '—';
+  return iso.slice(0, 10);
+}
+
+// ---------------------------------------------------------------------
+// Tabs
+// ---------------------------------------------------------------------
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ---------------------------------------------------------------------
+// OVERVIEW TAB
+// ---------------------------------------------------------------------
+let overviewData = [];
+let overviewSort = { key: 'total_messages', dir: 'desc' };
+
+function renderOverviewStats(data) {
+  const totalMessages = data.reduce((sum, r) => sum + Number(r.total_messages), 0);
+  const busiest = data[0];
+  const quietest = [...data].sort((a, b) => Number(a.total_messages) - Number(b.total_messages))[0];
+
+  document.getElementById('overview-stats').innerHTML = `
+    <div class="stat-card">
+      <div class="label">Total Messages Logged</div>
+      <div class="value">${fmt(totalMessages)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Channels &amp; Threads Tracked</div>
+      <div class="value">${data.length}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Busiest</div>
+      <div class="value" style="font-size:1rem;">${busiest.name}</div>
+      <div class="sub">${fmt(busiest.total_messages)} messages</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Quietest</div>
+      <div class="value" style="font-size:1rem;">${quietest.name}</div>
+      <div class="sub">${fmt(quietest.total_messages)} messages</div>
+    </div>
+  `;
+}
+
+function renderTopBars(data) {
+  const top = [...data].sort((a, b) => Number(b.total_messages) - Number(a.total_messages)).slice(0, 20);
+  const max = Number(top[0].total_messages);
+  document.getElementById('top-bars').innerHTML = top.map(r => `
+    <div class="bar-row">
+      <div class="bname" title="${r.name}">${r.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(Number(r.total_messages) / max * 100).toFixed(1)}%"></div></div>
+      <div class="bcount">${fmt(r.total_messages)}</div>
+    </div>
+  `).join('');
+}
+
+function renderOverviewTable() {
+  let rows = [...overviewData];
+  const q = document.getElementById('search-overview').value.trim().toLowerCase();
+  if (q) rows = rows.filter(r => r.name.toLowerCase().includes(q));
+
+  const { key, dir } = overviewSort;
+  rows.sort((a, b) => {
+    let av = a[key], bv = b[key];
+    if (key === 'total_messages' || key === 'unique_authors') { av = Number(av); bv = Number(bv); }
+    if (av < bv) return dir === 'asc' ? -1 : 1;
+    if (av > bv) return dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  document.querySelector('#overview-table tbody').innerHTML = rows.map(r => `
+    <tr class="${r.name.includes(' > ') ? 'thread-row' : ''}">
+      <td class="name-cell">${r.name}</td>
+      <td>${fmt(r.total_messages)}</td>
+      <td>${fmt(r.unique_authors)}</td>
+      <td>${shortDate(r.first_message)}</td>
+      <td>${shortDate(r.last_message)}</td>
+    </tr>
+  `).join('');
+
+  document.querySelectorAll('#overview-table th').forEach(th => {
+    const arrow = th.querySelector('.arrow');
+    arrow.textContent = th.dataset.key === key ? (dir === 'asc' ? '▲' : '▼') : '';
+  });
+}
+
+document.querySelectorAll('#overview-table th').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if (overviewSort.key === key) {
+      overviewSort.dir = overviewSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      overviewSort = { key, dir: key === 'name' ? 'asc' : 'desc' };
+    }
+    renderOverviewTable();
+  });
+});
+document.getElementById('search-overview').addEventListener('input', renderOverviewTable);
+
+// ---------------------------------------------------------------------
+// THREADS / NESTED TAB
+// ---------------------------------------------------------------------
+let nestedData = [];
+
+function renderNestedTable() {
+  const container = document.getElementById('nested-container');
+  if (!nestedData || nestedData.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        No <code>channel_stats_nested.csv</code> found yet.<br><br>
+        Run <code>nested_channel_summary.py</code> against your
+        <code>channel_stats_raw.csv</code>, then drop the resulting
+        <code>channel_stats_nested.csv</code> into the site's <code>/data</code> folder.
+      </div>`;
+    return;
+  }
+
+  let rows = [...nestedData];
+  const q = document.getElementById('search-nested').value.trim().toLowerCase();
+  if (q) {
+    // keep whole groups if any row in the group matches
+    const parentOf = n => n.split(' > ')[0].replace('#', '').replace(' [TOTAL incl. threads]', '');
+    const matchingParents = new Set(
+      rows.filter(r => r.name.toLowerCase().includes(q)).map(r => parentOf(r.name))
+    );
+    rows = rows.filter(r => matchingParents.has(parentOf(r.name)));
+  }
+
+  container.innerHTML = `
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th><th>Messages</th><th>Unique Authors</th><th>First Message</th><th>Last Message</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr class="${r.name.includes('[TOTAL') ? 'total-row' : (r.name.includes(' > ') ? 'thread-row' : '')}">
+              <td class="name-cell">${r.name}</td>
+              <td>${fmt(r.total_messages)}</td>
+              <td>${fmt(r.unique_authors)}</td>
+              <td>${shortDate(r.first_message)}</td>
+              <td>${shortDate(r.last_message)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+document.getElementById('search-nested').addEventListener('input', renderNestedTable);
+
+// ---------------------------------------------------------------------
+// TRENDS TAB
+// ---------------------------------------------------------------------
+function renderLifespan(data) {
+  const sorted = [...data].filter(r => !r.name.includes(' > ')).sort((a, b) => new Date(b.last_message) - new Date(a.last_message));
+  const allDates = data.flatMap(r => [new Date(r.first_message), new Date(r.last_message)]).filter(d => !isNaN(d));
+  const minDate = new Date(Math.min(...allDates));
+  const maxDate = new Date(Math.max(...allDates));
+  const span = maxDate - minDate;
+
+  document.getElementById('lifespan-container').innerHTML = sorted.slice(0, 40).map(r => {
+    const start = new Date(r.first_message);
+    const end = new Date(r.last_message);
+    const left = ((start - minDate) / span * 100).toFixed(2);
+    const width = Math.max(0.6, ((end - start) / span * 100)).toFixed(2);
+    return `
+      <div class="lifespan-row">
+        <div class="lifespan-name" title="${r.name}">${r.name}</div>
+        <div class="lifespan-track">
+          <div class="lifespan-bar" style="left:${left}%; width:${width}%;" title="${shortDate(r.first_message)} → ${shortDate(r.last_message)}"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function renderTrendsChart() {
+  const monthly = await fetchCSV('data/channel_stats_monthly.csv');
+  const container = document.getElementById('trends-chart-container');
+
+  if (!monthly) {
+    container.innerHTML = `
+      <div class="empty-state">
+        No <code>channel_stats_monthly.csv</code> found yet.<br><br>
+        Drop the <code>channel_stats_monthly.csv</code> produced by
+        <code>discord_channel_stats.py</code> (or <code>rebuild_stats_from_raw.py</code>)
+        into the site's <code>/data</code> folder to see a trend chart here.
+      </div>`;
+    return;
+  }
+
+  // total messages per month across the whole server
+  const totalsByMonth = {};
+  monthly.forEach(r => {
+    totalsByMonth[r.year_month] = (totalsByMonth[r.year_month] || 0) + Number(r.message_count);
+  });
+  const months = Object.keys(totalsByMonth).sort();
+  const totals = months.map(m => totalsByMonth[m]);
+
+  container.innerHTML = '<canvas id="trendsCanvas" height="90"></canvas>';
+  new Chart(document.getElementById('trendsCanvas'), {
+    type: 'line',
+    data: {
+      labels: months,
+      datasets: [{
+        label: 'Total messages / month (all channels)',
+        data: totals,
+        borderColor: '#c8a032',
+        backgroundColor: 'rgba(200,160,50,0.15)',
+        fill: true,
+        tension: 0.25,
+        pointRadius: 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#a89a7c' } } },
+      scales: {
+        x: { ticks: { color: '#a89a7c', maxTicksLimit: 16 }, grid: { color: '#4a3b28' } },
+        y: { ticks: { color: '#a89a7c' }, grid: { color: '#2b221a' } }
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------
+(async function init() {
+  const summary = await fetchCSV('data/channel_stats_summary.csv');
+  if (summary) {
+    overviewData = summary;
+    renderOverviewStats(summary);
+    renderTopBars(summary);
+    renderOverviewTable();
+    renderLifespan(summary);
+  } else {
+    document.getElementById('overview-stats').innerHTML =
+      '<div class="empty-state">Could not load data/channel_stats_summary.csv</div>';
+  }
+
+  const nested = await fetchCSV('data/channel_stats_nested.csv');
+  nestedData = nested || [];
+  renderNestedTable();
+
+  await renderTrendsChart();
+})();
+</script>
+
+</body>
+</html>
