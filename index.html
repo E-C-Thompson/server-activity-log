@@ -612,6 +612,32 @@ document.getElementById('search-overview').addEventListener('input', renderOverv
 // THREADS / NESTED TAB
 // ---------------------------------------------------------------------
 let nestedData = [];
+let expandedParents = new Set();
+
+function parentOf(name) {
+  return name.split(' > ')[0].replace('#', '').replace(' [TOTAL incl. threads]', '');
+}
+
+function groupNestedRows(rows) {
+  const groups = {};
+  rows.forEach(r => {
+    const p = parentOf(r.name);
+    if (!groups[p]) groups[p] = { parent: p, summaryRow: null, childRows: [] };
+    if (r.name.includes('[TOTAL')) {
+      groups[p].summaryRow = r;
+    } else {
+      groups[p].childRows.push(r);
+    }
+  });
+  // channels with no threads never got a TOTAL row -- their one row IS the summary
+  Object.values(groups).forEach(g => {
+    if (!g.summaryRow && g.childRows.length === 1) {
+      g.summaryRow = g.childRows[0];
+      g.childRows = [];
+    }
+  });
+  return Object.values(groups).sort((a, b) => Number(b.summaryRow.total_messages) - Number(a.summaryRow.total_messages));
+}
 
 function renderNestedTable() {
   const container = document.getElementById('nested-container');
@@ -629,36 +655,64 @@ function renderNestedTable() {
   let rows = [...nestedData];
   const q = document.getElementById('search-nested').value.trim().toLowerCase();
   if (q) {
-    // keep whole groups if any row in the group matches
-    const parentOf = n => n.split(' > ')[0].replace('#', '').replace(' [TOTAL incl. threads]', '');
     const matchingParents = new Set(
       rows.filter(r => r.name.toLowerCase().includes(q)).map(r => parentOf(r.name))
     );
     rows = rows.filter(r => matchingParents.has(parentOf(r.name)));
   }
 
+  const groups = groupNestedRows(rows);
+
   container.innerHTML = `
     <div class="table-scroll">
       <table>
         <thead>
           <tr>
+            <th style="width:24px;"></th>
             <th>Name</th><th>Messages</th><th>Unique Authors</th><th>First Message</th><th>Last Message</th>
           </tr>
         </thead>
         <tbody>
-          ${rows.map(r => `
-            <tr class="${r.name.includes('[TOTAL') ? 'total-row' : (r.name.includes(' > ') ? 'thread-row' : '')}">
-              <td class="name-cell">${r.name}</td>
-              <td>${fmt(r.total_messages)}</td>
-              <td>${fmt(r.unique_authors)}</td>
-              <td>${shortDate(r.first_message)}</td>
-              <td>${shortDate(r.last_message)}</td>
-            </tr>
-          `).join('')}
+          ${groups.map(g => {
+            const hasThreads = g.childRows.length > 0;
+            const isExpanded = expandedParents.has(g.parent);
+            const summaryArrow = hasThreads ? (isExpanded ? '▾' : '▸') : '';
+            const summaryRowHTML = `
+              <tr class="${hasThreads ? 'total-row' : ''}" ${hasThreads ? `data-toggle-parent="${g.parent}" style="cursor:pointer;"` : ''}>
+                <td style="text-align:center; color:var(--gold-bright);">${summaryArrow}</td>
+                <td class="name-cell">#${g.parent}${hasThreads ? ' (incl. threads)' : ''}</td>
+                <td>${fmt(g.summaryRow.total_messages)}</td>
+                <td>${fmt(g.summaryRow.unique_authors)}</td>
+                <td>${shortDate(g.summaryRow.first_message)}</td>
+                <td>${shortDate(g.summaryRow.last_message)}</td>
+              </tr>`;
+
+            const childRowsHTML = (hasThreads && isExpanded) ? g.childRows.map(r => `
+              <tr class="${r.name.includes(' > ') ? 'thread-row' : ''}">
+                <td></td>
+                <td class="name-cell">${r.name}</td>
+                <td>${fmt(r.total_messages)}</td>
+                <td>${fmt(r.unique_authors)}</td>
+                <td>${shortDate(r.first_message)}</td>
+                <td>${shortDate(r.last_message)}</td>
+              </tr>
+            `).join('') : '';
+
+            return summaryRowHTML + childRowsHTML;
+          }).join('')}
         </tbody>
       </table>
     </div>
   `;
+
+  container.querySelectorAll('[data-toggle-parent]').forEach(row => {
+    row.addEventListener('click', () => {
+      const p = row.dataset.toggleParent;
+      if (expandedParents.has(p)) expandedParents.delete(p);
+      else expandedParents.add(p);
+      renderNestedTable();
+    });
+  });
 }
 document.getElementById('search-nested').addEventListener('input', renderNestedTable);
 
