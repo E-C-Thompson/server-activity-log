@@ -429,12 +429,20 @@
     </section>
 
     <section class="block">
-      <h2>Channel Lifespan (last 12 months)</h2>
+      <h2 id="lifespan-heading">Channel Lifespan</h2>
       <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
-        Bars are clipped to the last year so recent activity is actually
-        readable. Channels with no messages at all in that window show
-        "quiet since" instead of a bar.
+        Bars are clipped to the selected window so recent activity is
+        actually readable. Channels with no messages at all in that window
+        show "quiet since" instead of a bar.
       </p>
+      <div class="controls" id="lifespan-scale-controls" style="align-items:center;">
+        <span style="color: var(--text-muted); font-size: 0.78rem;">Window:</span>
+        <button class="tab-btn gran-btn" data-window="all" style="padding:6px 14px; font-size:0.7rem;">All time</button>
+        <button class="tab-btn gran-btn" data-window="60" style="padding:6px 14px; font-size:0.7rem;">5 years</button>
+        <button class="tab-btn gran-btn" data-window="24" style="padding:6px 14px; font-size:0.7rem;">2 years</button>
+        <button class="tab-btn gran-btn active" data-window="12" style="padding:6px 14px; font-size:0.7rem;">1 year</button>
+        <button class="tab-btn gran-btn" data-window="6" style="padding:6px 14px; font-size:0.7rem;">6 months</button>
+      </div>
       <div id="lifespan-container"></div>
     </section>
   </div>
@@ -657,32 +665,64 @@ document.getElementById('search-nested').addEventListener('input', renderNestedT
 // ---------------------------------------------------------------------
 // TRENDS TAB
 // ---------------------------------------------------------------------
+let lifespanData = null;
+let currentLifespanWindow = 12; // months, or 'all'
+
 function renderLifespan(data) {
+  if (data) lifespanData = data; // cache so the scale buttons can re-render without a re-fetch
+  data = lifespanData;
+  if (!data) return;
+
   const sorted = [...data].filter(r => !r.name.includes(' > ')).sort((a, b) => new Date(b.last_message) - new Date(a.last_message));
   const allDates = data.flatMap(r => [new Date(r.first_message), new Date(r.last_message)]).filter(d => !isNaN(d));
   const overallMax = new Date(Math.max(...allDates));
+  const overallMin = new Date(Math.min(...allDates));
 
-  // Window: last ~12 months, ending at the most recent message in the data
   const windowEnd = overallMax;
-  const windowStart = new Date(windowEnd);
-  windowStart.setMonth(windowStart.getMonth() - 12);
+  let windowStart;
+  if (currentLifespanWindow === 'all') {
+    windowStart = overallMin;
+  } else {
+    windowStart = new Date(windowEnd);
+    windowStart.setMonth(windowStart.getMonth() - currentLifespanWindow);
+    if (windowStart < overallMin) windowStart = overallMin;
+  }
   const span = windowEnd - windowStart;
+  const spanMonths = span / (1000 * 60 * 60 * 24 * 30.44);
 
-  // Build month-tick axis labels across the window
+  // Update the heading to reflect the active window
+  const heading = document.getElementById('lifespan-heading');
+  if (heading) {
+    heading.textContent = currentLifespanWindow === 'all'
+      ? 'Channel Lifespan (all time)'
+      : `Channel Lifespan (last ${currentLifespanWindow >= 12 ? (currentLifespanWindow/12) + (currentLifespanWindow === 12 ? ' year' : ' years') : currentLifespanWindow + ' months'})`;
+  }
+
+  // Adapt tick spacing to the window length so "all time" doesn't cram in
+  // a tick for every single month across several years.
+  let tickStepMonths = 1;
+  if (spanMonths > 60) tickStepMonths = 12;
+  else if (spanMonths > 24) tickStepMonths = 6;
+  else if (spanMonths > 12) tickStepMonths = 2;
+
   const ticks = [];
   const tickDate = new Date(windowStart);
   tickDate.setDate(1);
   while (tickDate <= windowEnd) {
     ticks.push(new Date(tickDate));
-    tickDate.setMonth(tickDate.getMonth() + 1);
+    tickDate.setMonth(tickDate.getMonth() + tickStepMonths);
   }
+  const tickLabelFmt = tickStepMonths === 12
+    ? (t => t.getFullYear().toString())
+    : (t => t.toLocaleString('en-US', { month: 'short', year: spanMonths > 24 ? '2-digit' : undefined }));
+
   const axisHTML = `
     <div class="lifespan-row" style="margin-bottom: 10px;">
       <div class="lifespan-name"></div>
       <div style="position: relative; height: 16px;">
         ${ticks.map(t => {
           const left = ((t - windowStart) / span * 100).toFixed(2);
-          return `<span style="position:absolute; left:${left}%; font-size:0.68rem; color:var(--text-muted); font-family:'IBM Plex Mono',monospace; transform: translateX(-4px);">${t.toLocaleString('en-US',{month:'short'})}</span>`;
+          return `<span style="position:absolute; left:${left}%; font-size:0.68rem; color:var(--text-muted); font-family:'IBM Plex Mono',monospace; transform: translateX(-4px);">${tickLabelFmt(t)}</span>`;
         }).join('')}
       </div>
     </div>
@@ -693,7 +733,7 @@ function renderLifespan(data) {
     const end = new Date(r.last_message);
 
     if (end < windowStart) {
-      // No activity at all within the last 12 months
+      // No activity at all within the selected window
       return `
         <div class="lifespan-row">
           <div class="lifespan-name" title="${r.name}">${r.name}</div>
@@ -721,6 +761,17 @@ function renderLifespan(data) {
 
   document.getElementById('lifespan-container').innerHTML = axisHTML + barsHTML;
 }
+
+document.querySelectorAll('#lifespan-scale-controls [data-window]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#lifespan-scale-controls [data-window]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const val = btn.dataset.window;
+    currentLifespanWindow = val === 'all' ? 'all' : parseInt(val, 10);
+    renderLifespan();
+  });
+});
+
 
 async function renderTrendsChart() {
   const monthly = await fetchCSV('data/channel_stats_monthly.csv');
