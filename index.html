@@ -666,6 +666,23 @@
     </section>
 
     <section class="block">
+      <h2>Biggest Gaps</h2>
+      <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
+        Each channel's largest individual silent stretch -- an actual
+        "quiet from this date to this date" period, not an average. Click a
+        channel to see its next 4 biggest gaps too.
+      </p>
+      <div class="controls" id="biggest-gaps-controls" style="align-items:center;">
+        <span style="color: var(--text-muted); font-size: 0.78rem;">Sort by:</span>
+        <button class="tab-btn gran-btn active" data-gaps-sort="desc" style="padding:6px 14px; font-size:0.7rem;">Longest gap first</button>
+        <button class="tab-btn gran-btn" data-gaps-sort="asc" style="padding:6px 14px; font-size:0.7rem;">Shortest gap first</button>
+      </div>
+      <div id="biggest-gaps-list" style="max-height: 640px; overflow-y: auto; padding-right: 6px;">
+        <div class="empty-state">Loading…</div>
+      </div>
+    </section>
+
+    <section class="block">
       <h2 id="lifespan-heading">Channel Lifespan</h2>
       <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
         Bars are clipped to the selected window so recent activity is
@@ -1731,9 +1748,11 @@ async function loadHeatmaps() {
   weeklyGapByParent = await fetchCSV('data/channel_stats_avg_gap_weekly_by_parent.csv');
   monthlyGapByParent = await fetchCSV('data/channel_stats_avg_gap_monthly_by_parent.csv');
   overallGapByParent = await fetchCSV('data/channel_stats_gap_overall_by_parent.csv');
+  biggestGapsByParent = await fetchCSV('data/channel_stats_biggest_gaps_by_parent.csv');
   renderDensityHeatmap();
   renderGapHeatmap();
   renderGapRateChart();
+  renderBiggestGaps();
 }
 
 let overallGapByParent = null;
@@ -1792,6 +1811,100 @@ document.querySelectorAll('#gap-rate-controls [data-gaprate-sort]').forEach(btn 
     btn.classList.add('active');
     gapRateState.sortDir = btn.dataset.gaprateSort;
     renderGapRateChart();
+  });
+});
+
+// ---------------------------------------------------------------------
+// BIGGEST GAPS -- each channel's largest individual silent stretches,
+// with actual start/end dates, not an averaged number.
+// ---------------------------------------------------------------------
+let biggestGapsByParent = null;
+let biggestGapsSortDir = 'desc';
+let expandedGapChannels = new Set();
+
+function groupBiggestGaps(rows) {
+  const groups = {};
+  rows.forEach(r => {
+    if (!groups[r.parent_channel]) groups[r.parent_channel] = [];
+    groups[r.parent_channel].push({
+      rank: Number(r.rank),
+      start: r.gap_start,
+      end: r.gap_end,
+      hours: Number(r.gap_hours),
+    });
+  });
+  Object.values(groups).forEach(list => list.sort((a, b) => a.rank - b.rank));
+  return groups;
+}
+
+function renderBiggestGaps() {
+  const container = document.getElementById('biggest-gaps-list');
+  if (!biggestGapsByParent) {
+    container.innerHTML = `
+      <div class="empty-state">
+        No <code>channel_stats_biggest_gaps_by_parent.csv</code> found yet.<br><br>
+        Run <code>build_parent_timeseries.py</code> against your
+        <code>channel_stats_raw.csv</code>, then drop the resulting file
+        into the site's <code>/data</code> folder.
+      </div>`;
+    return;
+  }
+
+  const groups = groupBiggestGaps(biggestGapsByParent);
+  const sortMult = biggestGapsSortDir === 'asc' ? -1 : 1;
+  const channels = Object.keys(groups).sort((a, b) => sortMult * (groups[b][0].hours - groups[a][0].hours));
+
+  container.innerHTML = channels.map(ch => {
+    const gaps = groups[ch];
+    const biggest = gaps[0];
+    const isExpanded = expandedGapChannels.has(ch);
+    const hasMore = gaps.length > 1;
+    const arrow = hasMore ? (isExpanded ? '▾' : '▸') : '';
+
+    const headerRow = `
+      <div style="display:flex; align-items:center; padding:9px 4px; border-bottom:1px solid var(--border); ${hasMore ? 'cursor:pointer;' : ''}"
+           ${hasMore ? `data-toggle-gap-channel="${ch}"` : ''}>
+        <span style="width:20px; color:var(--gold-bright);">${arrow}</span>
+        <span style="flex:1; font-size:0.85rem;">#${ch}</span>
+        <span style="font-family:'IBM Plex Mono',monospace; color:var(--ember); font-size:0.8rem; margin-right:14px;">
+          quiet ${shortDate(biggest.start)} → ${shortDate(biggest.end)}
+        </span>
+        <span style="font-family:'IBM Plex Mono',monospace; color:var(--gold-bright); font-weight:600; min-width:70px; text-align:right; font-size:0.85rem;">
+          ${fmtHours(biggest.hours)}
+        </span>
+      </div>`;
+
+    const childRows = (hasMore && isExpanded) ? gaps.slice(1).map(g => `
+      <div style="display:flex; align-items:center; padding:7px 4px 7px 26px; border-bottom:1px solid rgba(255,255,255,0.03); color:var(--text-muted);">
+        <span style="flex:1; font-size:0.8rem;">#${g.rank}</span>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:0.78rem; margin-right:14px;">
+          ${shortDate(g.start)} → ${shortDate(g.end)}
+        </span>
+        <span style="font-family:'IBM Plex Mono',monospace; min-width:70px; text-align:right; font-size:0.8rem;">
+          ${fmtHours(g.hours)}
+        </span>
+      </div>
+    `).join('') : '';
+
+    return headerRow + childRows;
+  }).join('');
+
+  container.querySelectorAll('[data-toggle-gap-channel]').forEach(row => {
+    row.addEventListener('click', () => {
+      const ch = row.dataset.toggleGapChannel;
+      if (expandedGapChannels.has(ch)) expandedGapChannels.delete(ch);
+      else expandedGapChannels.add(ch);
+      renderBiggestGaps();
+    });
+  });
+}
+
+document.querySelectorAll('#biggest-gaps-controls [data-gaps-sort]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#biggest-gaps-controls [data-gaps-sort]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    biggestGapsSortDir = btn.dataset.gapsSort;
+    renderBiggestGaps();
   });
 });
 
