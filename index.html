@@ -401,6 +401,28 @@
     </section>
 
     <section class="block">
+      <h2>Messages Per Day / Week, By Channel</h2>
+      <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
+        Threads count toward their parent channel here — the counting
+        thread's messages show up inside #meme-queens, not as a separate line.
+      </p>
+      <div class="controls" id="channel-timeseries-controls" style="align-items:center;">
+        <button class="tab-btn active" data-granularity="daily" style="padding:6px 14px; font-size:0.7rem;">Daily</button>
+        <button class="tab-btn" data-granularity="weekly" style="padding:6px 14px; font-size:0.7rem;">Weekly</button>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Showing top</span>
+        <select id="channel-count-select" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:6px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
+          <option value="5">5</option>
+          <option value="8" selected>8</option>
+          <option value="12">12</option>
+        </select>
+        <span style="color: var(--text-muted); font-size: 0.78rem;">busiest channels</span>
+      </div>
+      <div id="channel-timeseries-container">
+        <div class="empty-state">Loading…</div>
+      </div>
+    </section>
+
+    <section class="block">
       <h2>Channel Lifespan (last 12 months)</h2>
       <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
         Bars are clipped to the last year so recent activity is actually
@@ -412,6 +434,7 @@
   </div>
 
 </main>
+
 
 <footer>
   Data updates by replacing the CSV files in <code>/data</code> and re-pushing to GitHub.
@@ -743,6 +766,117 @@ async function renderTrendsChart() {
 }
 
 // ---------------------------------------------------------------------
+// PER-CHANNEL DAILY/WEEKLY TIME SERIES (threads rolled into parent channel)
+// ---------------------------------------------------------------------
+let dailyByParent = null;
+let weeklyByParent = null;
+let channelTimeseriesChart = null;
+let currentGranularity = 'daily';
+
+const CHANNEL_LINE_COLORS = [
+  '#c8a032', '#4f7a6b', '#9a5240', '#6d8fb0',
+  '#8a9a4f', '#a06ba8', '#b0813f', '#5f9a8a',
+];
+
+function buildChannelTimeseries(rows, granularity) {
+  const dateKey = granularity === 'daily' ? 'date' : 'week_start';
+
+  // total per channel across all time, to pick the busiest ones
+  const totalsByChannel = {};
+  rows.forEach(r => {
+    totalsByChannel[r.parent_channel] = (totalsByChannel[r.parent_channel] || 0) + Number(r.message_count);
+  });
+
+  const countSelect = document.getElementById('channel-count-select');
+  const topN = countSelect ? parseInt(countSelect.value, 10) : 8;
+
+  const topChannels = Object.keys(totalsByChannel)
+    .sort((a, b) => totalsByChannel[b] - totalsByChannel[a])
+    .slice(0, topN);
+
+  const allDates = [...new Set(rows.map(r => r[dateKey]))].sort();
+
+  const perChannelSeries = {};
+  topChannels.forEach(ch => { perChannelSeries[ch] = {}; });
+  rows.forEach(r => {
+    if (topChannels.includes(r.parent_channel)) {
+      perChannelSeries[r.parent_channel][r[dateKey]] = Number(r.message_count);
+    }
+  });
+
+  const datasets = topChannels.map((ch, i) => ({
+    label: '#' + ch,
+    data: allDates.map(d => perChannelSeries[ch][d] || 0),
+    borderColor: CHANNEL_LINE_COLORS[i % CHANNEL_LINE_COLORS.length],
+    backgroundColor: 'transparent',
+    tension: 0.2,
+    pointRadius: 0,
+    borderWidth: 1.5,
+  }));
+
+  return { labels: allDates, datasets };
+}
+
+function renderChannelTimeseriesChart() {
+  const rows = currentGranularity === 'daily' ? dailyByParent : weeklyByParent;
+  const container = document.getElementById('channel-timeseries-container');
+
+  if (!rows) {
+    const fileHint = currentGranularity === 'daily'
+      ? 'channel_stats_daily_by_parent.csv'
+      : 'channel_stats_weekly_by_parent.csv';
+    container.innerHTML = `
+      <div class="empty-state">
+        No <code>${fileHint}</code> found yet.<br><br>
+        Run <code>build_parent_timeseries.py</code> against your
+        <code>channel_stats_raw.csv</code>, then drop both output files
+        into the site's <code>/data</code> folder.
+      </div>`;
+    return;
+  }
+
+  const { labels, datasets } = buildChannelTimeseries(rows, currentGranularity);
+
+  if (channelTimeseriesChart) {
+    channelTimeseriesChart.destroy();
+  }
+
+  container.innerHTML = '<canvas id="channelTimeseriesCanvas" height="100"></canvas>';
+  channelTimeseriesChart = new Chart(document.getElementById('channelTimeseriesCanvas'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#a89a7c', boxWidth: 12, font: { size: 10 } } }
+      },
+      scales: {
+        x: { ticks: { color: '#a89a7c', maxTicksLimit: 14 }, grid: { color: '#4a3b28' } },
+        y: { ticks: { color: '#a89a7c' }, grid: { color: '#2b221a' } }
+      }
+    }
+  });
+}
+
+document.querySelectorAll('#channel-timeseries-controls [data-granularity]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#channel-timeseries-controls [data-granularity]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentGranularity = btn.dataset.granularity;
+    renderChannelTimeseriesChart();
+  });
+});
+
+document.getElementById('channel-count-select')?.addEventListener('change', renderChannelTimeseriesChart);
+
+async function loadChannelTimeseries() {
+  dailyByParent = await fetchCSV('data/channel_stats_daily_by_parent.csv');
+  weeklyByParent = await fetchCSV('data/channel_stats_weekly_by_parent.csv');
+  renderChannelTimeseriesChart();
+}
+
+// ---------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------
 (async function init() {
@@ -763,6 +897,7 @@ async function renderTrendsChart() {
   renderNestedTable();
 
   await renderTrendsChart();
+  await loadChannelTimeseries();
 })();
 </script>
 
