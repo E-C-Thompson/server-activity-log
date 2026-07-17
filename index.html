@@ -1665,13 +1665,12 @@ function renderGapRateChart() {
   }));
 
   const sorted = [...rows].sort((a, b) => sortMult * (b.value - a.value));
-  const max = sorted.reduce((m, r) => Math.max(m, r.value), 0) || 1;
 
-  container.innerHTML = sorted.map(r => `
-    <div class="bar-row">
-      <div class="bname" title="${r.name}">${r.name}</div>
-      <div class="bar-track"><div class="bar-fill" style="width:${(r.value / max * 100).toFixed(1)}%"></div></div>
-      <div class="bcount">${fmtHours(r.value)}</div>
+  container.innerHTML = sorted.map((r, i) => `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 4px; border-bottom:1px solid var(--border); font-size:0.85rem;">
+      <span style="font-family:'IBM Plex Mono',monospace; color:var(--text-muted); width:28px; flex-shrink:0;">${i + 1}</span>
+      <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${r.name}">${r.name}</span>
+      <span style="font-family:'IBM Plex Mono',monospace; color:var(--gold-bright); font-weight:600; text-align:right; min-width:80px;">${fmtHours(r.value)}</span>
     </div>
   `).join('');
 }
