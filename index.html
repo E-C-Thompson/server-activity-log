@@ -766,7 +766,6 @@ let overviewSort = { key: 'total_messages', dir: 'desc' };
 function renderOverviewStats(data) {
   const totalMessages = data.reduce((sum, r) => sum + Number(r.total_messages), 0);
   const busiest = data[0];
-  const quietest = [...data].sort((a, b) => Number(a.total_messages) - Number(b.total_messages))[0];
 
   document.getElementById('overview-stats').innerHTML = `
     <div class="stat-card">
@@ -781,11 +780,6 @@ function renderOverviewStats(data) {
       <div class="label">Busiest</div>
       <div class="value" style="font-size:1rem;">${busiest.name}</div>
       <div class="sub">${fmt(busiest.total_messages)} messages</div>
-    </div>
-    <div class="stat-card">
-      <div class="label">Quietest</div>
-      <div class="value" style="font-size:1rem;">${quietest.name}</div>
-      <div class="sub">${fmt(quietest.total_messages)} messages</div>
     </div>
   `;
 }
