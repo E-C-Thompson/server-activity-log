@@ -543,10 +543,12 @@
           <option value="12" selected>1 year</option>
           <option value="6">6 months</option>
         </select>
-        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Rows:</span>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Show:</span>
+        <button class="tab-btn gran-btn active" data-density-sort="desc" style="padding:6px 14px; font-size:0.7rem;">Busiest</button>
+        <button class="tab-btn gran-btn" data-density-sort="asc" style="padding:6px 14px; font-size:0.7rem;">Quietest</button>
         <select id="density-rows-select" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:6px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
-          <option value="10">Top 10</option>
-          <option value="20" selected>Top 20</option>
+          <option value="10">10 channels</option>
+          <option value="20" selected>20 channels</option>
           <option value="all">All channels</option>
         </select>
       </div>
@@ -582,10 +584,12 @@
           <option value="12" selected>1 year</option>
           <option value="6">6 months</option>
         </select>
-        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Rows:</span>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Show:</span>
+        <button class="tab-btn gran-btn active" data-gap-sort="desc" style="padding:6px 14px; font-size:0.7rem;">Busiest</button>
+        <button class="tab-btn gran-btn" data-gap-sort="asc" style="padding:6px 14px; font-size:0.7rem;">Quietest</button>
         <select id="gap-rows-select" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:6px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
-          <option value="10">Top 10</option>
-          <option value="20" selected>Top 20</option>
+          <option value="10">10 channels</option>
+          <option value="20" selected>20 channels</option>
           <option value="all">All channels</option>
         </select>
       </div>
@@ -1206,8 +1210,8 @@ let dailyGapByParent = null;
 let weeklyGapByParent = null;
 let monthlyGapByParent = null;
 
-let densityState = { granularity: 'daily', window: '12', rows: '20' };
-let gapState = { granularity: 'daily', window: '12', rows: '20' };
+let densityState = { granularity: 'daily', window: '12', rows: '20', sortDir: 'desc' };
+let gapState = { granularity: 'daily', window: '12', rows: '20', sortDir: 'desc' };
 
 function getCountRows(granularity) {
   if (granularity === 'daily') return dailyByParent;
@@ -1379,14 +1383,22 @@ function renderHeatmap(outerId, state, valueRows, rankingRows, valueField, color
   });
 
   const totalsByChannel = {};
+  // Seed every channel that appears anywhere in the dataset with 0 first --
+  // otherwise a channel with zero messages in the selected window would be
+  // silently absent instead of correctly showing up as "quietest".
+  rankingRows.forEach(r => {
+    if (!(r.parent_channel in totalsByChannel)) totalsByChannel[r.parent_channel] = 0;
+  });
   rankingRows.forEach(r => {
     const d = toDateObj(r[dateKey]);
     if (d >= windowStart && d <= windowEnd) {
-      totalsByChannel[r.parent_channel] = (totalsByChannel[r.parent_channel] || 0) + Number(r.message_count);
+      totalsByChannel[r.parent_channel] += Number(r.message_count);
     }
   });
 
-  let channels = Object.keys(totalsByChannel).sort((a, b) => totalsByChannel[b] - totalsByChannel[a]);
+  const sortMultiplier = state.sortDir === 'asc' ? -1 : 1;
+  let channels = Object.keys(totalsByChannel)
+    .sort((a, b) => sortMultiplier * (totalsByChannel[b] - totalsByChannel[a]));
   if (state.rows !== 'all') channels = channels.slice(0, parseInt(state.rows, 10));
 
   if (channels.length === 0) {
@@ -1522,6 +1534,14 @@ document.getElementById('density-rows-select')?.addEventListener('change', (e) =
   densityState.rows = e.target.value;
   renderDensityHeatmap();
 });
+document.querySelectorAll('#density-controls [data-density-sort]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#density-controls [data-density-sort]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    densityState.sortDir = btn.dataset.densitySort;
+    renderDensityHeatmap();
+  });
+});
 
 document.querySelectorAll('#gap-controls [data-gap-gran]').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -1538,6 +1558,14 @@ document.getElementById('gap-window-select')?.addEventListener('change', (e) => 
 document.getElementById('gap-rows-select')?.addEventListener('change', (e) => {
   gapState.rows = e.target.value;
   renderGapHeatmap();
+});
+document.querySelectorAll('#gap-controls [data-gap-sort]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#gap-controls [data-gap-sort]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    gapState.sortDir = btn.dataset.gapSort;
+    renderGapHeatmap();
+  });
 });
 
 async function loadHeatmaps() {
