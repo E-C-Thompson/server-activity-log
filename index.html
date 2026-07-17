@@ -473,10 +473,7 @@
     </section>
 
     <section class="block">
-      <h2>All Channels &amp; Threads</h2>
-      <div class="controls">
-        <input type="text" id="search-overview" placeholder="Search channel or thread name...">
-      </div>
+      <h2>All Channels</h2>
       <div class="table-scroll">
         <table id="overview-table">
           <thead>
@@ -882,8 +879,6 @@ document.getElementById('top-bars-exclude-select')?.addEventListener('change', (
 
 function renderOverviewTable() {
   let rows = [...overviewData];
-  const q = document.getElementById('search-overview').value.trim().toLowerCase();
-  if (q) rows = rows.filter(r => r.name.toLowerCase().includes(q));
 
   const { key, dir } = overviewSort;
   rows.sort((a, b) => {
@@ -921,7 +916,6 @@ document.querySelectorAll('#overview-table th').forEach(th => {
     renderOverviewTable();
   });
 });
-document.getElementById('search-overview').addEventListener('input', renderOverviewTable);
 
 // ---------------------------------------------------------------------
 // THREADS / NESTED TAB
