@@ -407,8 +407,8 @@
         thread's messages show up inside #meme-queens, not as a separate line.
       </p>
       <div class="controls" id="channel-timeseries-controls" style="align-items:center;">
-        <button class="tab-btn active" data-granularity="daily" style="padding:6px 14px; font-size:0.7rem;">Daily</button>
-        <button class="tab-btn" data-granularity="weekly" style="padding:6px 14px; font-size:0.7rem;">Weekly</button>
+        <button class="tab-btn gran-btn active" data-granularity="daily" style="padding:6px 14px; font-size:0.7rem;">Daily</button>
+        <button class="tab-btn gran-btn" data-granularity="weekly" style="padding:6px 14px; font-size:0.7rem;">Weekly</button>
         <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Showing top</span>
         <select id="channel-count-select" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:6px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
           <option value="5">5</option>
@@ -416,6 +416,11 @@
           <option value="12">12</option>
         </select>
         <span style="color: var(--text-muted); font-size: 0.78rem;">busiest channels</span>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">From</span>
+        <input type="date" id="ts-date-from" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:5px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
+        <span style="color: var(--text-muted); font-size: 0.78rem;">to</span>
+        <input type="date" id="ts-date-to" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:5px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
+        <button id="ts-date-reset" class="tab-btn gran-btn" style="padding:6px 12px; font-size:0.7rem;">Reset range</button>
       </div>
       <div id="channel-timeseries-container">
         <div class="empty-state">Loading…</div>
@@ -497,9 +502,9 @@ function shortDate(iso) {
 // ---------------------------------------------------------------------
 // Tabs
 // ---------------------------------------------------------------------
-document.querySelectorAll('.tab-btn').forEach(btn => {
+document.querySelectorAll('.tabs .tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tabs .tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
@@ -781,9 +786,16 @@ const CHANNEL_LINE_COLORS = [
 function buildChannelTimeseries(rows, granularity) {
   const dateKey = granularity === 'daily' ? 'date' : 'week_start';
 
-  // total per channel across all time, to pick the busiest ones
+  const fromVal = document.getElementById('ts-date-from').value;
+  const toVal = document.getElementById('ts-date-to').value;
+
+  let filteredRows = rows;
+  if (fromVal) filteredRows = filteredRows.filter(r => r[dateKey] >= fromVal);
+  if (toVal) filteredRows = filteredRows.filter(r => r[dateKey] <= toVal);
+
+  // total per channel WITHIN the selected range, to pick the busiest ones
   const totalsByChannel = {};
-  rows.forEach(r => {
+  filteredRows.forEach(r => {
     totalsByChannel[r.parent_channel] = (totalsByChannel[r.parent_channel] || 0) + Number(r.message_count);
   });
 
@@ -794,11 +806,11 @@ function buildChannelTimeseries(rows, granularity) {
     .sort((a, b) => totalsByChannel[b] - totalsByChannel[a])
     .slice(0, topN);
 
-  const allDates = [...new Set(rows.map(r => r[dateKey]))].sort();
+  const allDates = [...new Set(filteredRows.map(r => r[dateKey]))].sort();
 
   const perChannelSeries = {};
   topChannels.forEach(ch => { perChannelSeries[ch] = {}; });
-  rows.forEach(r => {
+  filteredRows.forEach(r => {
     if (topChannels.includes(r.parent_channel)) {
       perChannelSeries[r.parent_channel][r[dateKey]] = Number(r.message_count);
     }
@@ -815,6 +827,24 @@ function buildChannelTimeseries(rows, granularity) {
   }));
 
   return { labels: allDates, datasets };
+}
+
+function setDateInputBounds() {
+  const allRows = [...(dailyByParent || []), ...(weeklyByParent || [])];
+  if (allRows.length === 0) return;
+  const key = 'date' in allRows[0] ? 'date' : 'week_start';
+  // dailyByParent uses 'date', weeklyByParent uses 'week_start' -- check both sets separately
+  const dailyDates = (dailyByParent || []).map(r => r.date);
+  const weeklyDates = (weeklyByParent || []).map(r => r.week_start);
+  const combined = [...dailyDates, ...weeklyDates].filter(Boolean).sort();
+  if (combined.length === 0) return;
+
+  const fromInput = document.getElementById('ts-date-from');
+  const toInput = document.getElementById('ts-date-to');
+  fromInput.min = combined[0];
+  fromInput.max = combined[combined.length - 1];
+  toInput.min = combined[0];
+  toInput.max = combined[combined.length - 1];
 }
 
 function renderChannelTimeseriesChart() {
@@ -836,6 +866,12 @@ function renderChannelTimeseriesChart() {
   }
 
   const { labels, datasets } = buildChannelTimeseries(rows, currentGranularity);
+
+  if (labels.length === 0) {
+    if (channelTimeseriesChart) { channelTimeseriesChart.destroy(); channelTimeseriesChart = null; }
+    container.innerHTML = '<div class="empty-state">No messages in the selected date range.</div>';
+    return;
+  }
 
   if (channelTimeseriesChart) {
     channelTimeseriesChart.destroy();
@@ -869,10 +905,18 @@ document.querySelectorAll('#channel-timeseries-controls [data-granularity]').for
 });
 
 document.getElementById('channel-count-select')?.addEventListener('change', renderChannelTimeseriesChart);
+document.getElementById('ts-date-from')?.addEventListener('change', renderChannelTimeseriesChart);
+document.getElementById('ts-date-to')?.addEventListener('change', renderChannelTimeseriesChart);
+document.getElementById('ts-date-reset')?.addEventListener('click', () => {
+  document.getElementById('ts-date-from').value = '';
+  document.getElementById('ts-date-to').value = '';
+  renderChannelTimeseriesChart();
+});
 
 async function loadChannelTimeseries() {
   dailyByParent = await fetchCSV('data/channel_stats_daily_by_parent.csv');
   weeklyByParent = await fetchCSV('data/channel_stats_weekly_by_parent.csv');
+  setDateInputBounds();
   renderChannelTimeseriesChart();
 }
 
