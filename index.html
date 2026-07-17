@@ -1350,10 +1350,28 @@ function renderHeatmap(outerId, state, valueRows, rankingRows, valueField, color
     return;
   }
   const dateObjs = allDates.map(toDateObj);
-  const overallMin = new Date(Math.min(...dateObjs));
-  const overallMax = new Date(Math.max(...dateObjs));
+  let overallMinMs = Infinity, overallMaxMs = -Infinity;
+  for (const d of dateObjs) {
+    const t = d.getTime();
+    if (t < overallMinMs) overallMinMs = t;
+    if (t > overallMaxMs) overallMaxMs = t;
+  }
+  const overallMin = new Date(overallMinMs);
+  const overallMax = new Date(overallMaxMs);
+
+  console.log(`[heatmap debug: ${outerId}]`, {
+    valueRowsCount: valueRows.length,
+    rankingRowsCount: rankingRows.length,
+    overallMin: overallMin.toISOString(),
+    overallMax: overallMax.toISOString(),
+  });
 
   const { windowStart, windowEnd } = resolveWindowGeneric(overallMin, overallMax, state.window);
+
+  console.log(`[heatmap debug: ${outerId}] window`, {
+    windowStart: windowStart.toISOString(),
+    windowEnd: windowEnd.toISOString(),
+  });
 
   const totalsByChannel = {};
   rankingRows.forEach(r => {
