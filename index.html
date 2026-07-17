@@ -475,54 +475,6 @@
     </section>
 
     <section class="block">
-      <h2>Messages Per Day / Week, By Channel</h2>
-      <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
-        Threads count toward their parent channel here — the counting
-        thread's messages show up inside #meme-queens, not as a separate line.
-      </p>
-      <div class="controls" id="channel-timeseries-controls" style="align-items:center;">
-        <button class="tab-btn gran-btn active" data-granularity="daily" style="padding:6px 14px; font-size:0.7rem;">Daily</button>
-        <button class="tab-btn gran-btn" data-granularity="weekly" style="padding:6px 14px; font-size:0.7rem;">Weekly</button>
-        <button class="tab-btn gran-btn" data-granularity="monthly" style="padding:6px 14px; font-size:0.7rem;">Monthly</button>
-        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Showing top</span>
-        <select id="channel-count-select" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:6px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
-          <option value="5">5</option>
-          <option value="8" selected>8</option>
-          <option value="12">12</option>
-        </select>
-        <span style="color: var(--text-muted); font-size: 0.78rem;">busiest channels</span>
-        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">From</span>
-        <input type="date" id="ts-date-from" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:5px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
-        <span style="color: var(--text-muted); font-size: 0.78rem;">to</span>
-        <input type="date" id="ts-date-to" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:5px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
-        <button id="ts-date-reset" class="tab-btn gran-btn" style="padding:6px 12px; font-size:0.7rem;">Reset range</button>
-      </div>
-      <div id="channel-timeseries-container">
-        <div class="empty-state">Loading…</div>
-      </div>
-    </section>
-
-    <section class="block">
-      <h2 id="lifespan-heading">Channel Lifespan</h2>
-      <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
-        Bars are clipped to the selected window so recent activity is
-        actually readable. Channels with no messages at all in that window
-        show "quiet since" instead of a bar.
-      </p>
-      <div class="controls" id="lifespan-scale-controls" style="align-items:center;">
-        <span style="color: var(--text-muted); font-size: 0.78rem;">Window:</span>
-        <button class="tab-btn gran-btn" data-window="all" style="padding:6px 14px; font-size:0.7rem;">All time</button>
-        <button class="tab-btn gran-btn" data-window="60" style="padding:6px 14px; font-size:0.7rem;">5 years</button>
-        <button class="tab-btn gran-btn" data-window="48" style="padding:6px 14px; font-size:0.7rem;">4 years</button>
-        <button class="tab-btn gran-btn" data-window="36" style="padding:6px 14px; font-size:0.7rem;">3 years</button>
-        <button class="tab-btn gran-btn" data-window="24" style="padding:6px 14px; font-size:0.7rem;">2 years</button>
-        <button class="tab-btn gran-btn active" data-window="12" style="padding:6px 14px; font-size:0.7rem;">1 year</button>
-        <button class="tab-btn gran-btn" data-window="6" style="padding:6px 14px; font-size:0.7rem;">6 months</button>
-      </div>
-      <div id="lifespan-container"></div>
-    </section>
-
-    <section class="block">
       <h2>Activity Density Heatmap</h2>
       <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
         Shows actual message volume per period, so gaps inside a channel's
@@ -604,6 +556,34 @@
     </section>
 
     <section class="block">
+      <h2>Messages Per Day / Week / Month, By Channel</h2>
+      <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
+        Threads count toward their parent channel here — the counting
+        thread's messages show up inside #meme-queens, not as a separate line.
+      </p>
+      <div class="controls" id="channel-timeseries-controls" style="align-items:center;">
+        <button class="tab-btn gran-btn active" data-granularity="daily" style="padding:6px 14px; font-size:0.7rem;">Daily</button>
+        <button class="tab-btn gran-btn" data-granularity="weekly" style="padding:6px 14px; font-size:0.7rem;">Weekly</button>
+        <button class="tab-btn gran-btn" data-granularity="monthly" style="padding:6px 14px; font-size:0.7rem;">Monthly</button>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Showing top</span>
+        <select id="channel-count-select" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:6px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
+          <option value="5">5</option>
+          <option value="8" selected>8</option>
+          <option value="12">12</option>
+        </select>
+        <span style="color: var(--text-muted); font-size: 0.78rem;">busiest channels</span>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">From</span>
+        <input type="date" id="ts-date-from" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:5px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
+        <span style="color: var(--text-muted); font-size: 0.78rem;">to</span>
+        <input type="date" id="ts-date-to" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:5px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
+        <button id="ts-date-reset" class="tab-btn gran-btn" style="padding:6px 12px; font-size:0.7rem;">Reset range</button>
+      </div>
+      <div id="channel-timeseries-container">
+        <div class="empty-state">Loading…</div>
+      </div>
+    </section>
+
+    <section class="block">
       <h2>Average Posts Per Day</h2>
       <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
         A single raw average per channel -- total messages (threads included)
@@ -622,6 +602,26 @@
       <div id="post-rate-bars" style="max-height: 640px; overflow-y: auto; padding-right: 6px;">
         <div class="empty-state">Loading…</div>
       </div>
+    </section>
+
+    <section class="block">
+      <h2 id="lifespan-heading">Channel Lifespan</h2>
+      <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
+        Bars are clipped to the selected window so recent activity is
+        actually readable. Channels with no messages at all in that window
+        show "quiet since" instead of a bar.
+      </p>
+      <div class="controls" id="lifespan-scale-controls" style="align-items:center;">
+        <span style="color: var(--text-muted); font-size: 0.78rem;">Window:</span>
+        <button class="tab-btn gran-btn" data-window="all" style="padding:6px 14px; font-size:0.7rem;">All time</button>
+        <button class="tab-btn gran-btn" data-window="60" style="padding:6px 14px; font-size:0.7rem;">5 years</button>
+        <button class="tab-btn gran-btn" data-window="48" style="padding:6px 14px; font-size:0.7rem;">4 years</button>
+        <button class="tab-btn gran-btn" data-window="36" style="padding:6px 14px; font-size:0.7rem;">3 years</button>
+        <button class="tab-btn gran-btn" data-window="24" style="padding:6px 14px; font-size:0.7rem;">2 years</button>
+        <button class="tab-btn gran-btn active" data-window="12" style="padding:6px 14px; font-size:0.7rem;">1 year</button>
+        <button class="tab-btn gran-btn" data-window="6" style="padding:6px 14px; font-size:0.7rem;">6 months</button>
+      </div>
+      <div id="lifespan-container"></div>
     </section>
   </div>
 
