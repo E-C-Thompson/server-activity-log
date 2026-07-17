@@ -527,6 +527,7 @@
         active-looking span are visible instead of hidden by a solid bar.
         Color is scaled per channel (relative to that channel's own busiest
         period in view), so quiet channels aren't washed out by #general.
+        Opens scrolled to the most recent end — scroll left for older history.
       </p>
       <div class="controls" id="density-controls" style="align-items:center;">
         <button class="tab-btn gran-btn active" data-density-gran="daily" style="padding:6px 14px; font-size:0.7rem;">Daily</button>
@@ -564,7 +565,8 @@
         average, within each period. A channel can post the same total
         count steadily or in one burst -- this shows which. Color is also
         scaled per channel, relative to its own fastest and slowest pace
-        in view.
+        in view. Opens scrolled to the most recent end — scroll left for
+        older history.
       </p>
       <div class="controls" id="gap-controls" style="align-items:center;">
         <button class="tab-btn gran-btn active" data-gap-gran="daily" style="padding:6px 14px; font-size:0.7rem;">Daily</button>
@@ -1402,7 +1404,7 @@ function renderHeatmap(outerId, state, valueRows, rankingRows, valueField, color
         <div class="heatmap-label-row" style="height:18px; border-bottom:1px solid var(--border);"></div>
         ${channels.map(ch => `<div class="heatmap-label-row" style="height:${rowHeight}px;" title="#${ch}">#${ch}</div>`).join('')}
       </div>
-      <div class="heatmap-scroll">
+      <div class="heatmap-scroll" id="${outerId}-scroll">
         <div class="heatmap-axis" id="${outerId}-axis" style="width:${canvasWidth}px;"></div>
         <canvas id="${outerId}-canvas" width="${canvasWidth}" height="${canvasHeight}" style="display:block;"></canvas>
       </div>
@@ -1463,6 +1465,12 @@ function renderHeatmap(outerId, state, valueRows, rankingRows, valueField, color
     tooltip.style.display = 'block';
   };
   canvas.onmouseleave = () => { tooltip.style.display = 'none'; };
+
+  // Wider windows (5yr, all time) at daily/weekly granularity produce a
+  // canvas wider than the visible box. Default to showing the most recent
+  // end rather than leaving it scrolled to the oldest data on the left.
+  const scrollEl = document.getElementById(`${outerId}-scroll`);
+  if (scrollEl) scrollEl.scrollLeft = scrollEl.scrollWidth;
 }
 
 function renderDensityHeatmap() {
