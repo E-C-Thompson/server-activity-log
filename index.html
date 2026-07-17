@@ -609,10 +609,6 @@
 </main>
 
 
-<footer>
-  Data updates by replacing the CSV files in <code>/data</code> and re-pushing to GitHub.
-</footer>
-
 <script>
 // ---------------------------------------------------------------------
 // CSV parsing (handles quoted fields with embedded commas, e.g. thread
@@ -796,6 +792,20 @@ function groupNestedRows(rows) {
     }
   });
   return Object.values(groups).sort((a, b) => Number(b.summaryRow.total_messages) - Number(a.summaryRow.total_messages));
+}
+
+// Flat, one-row-per-channel view (threads folded into their parent's totals)
+// -- used for the Overview tab, which is meant to be an at-a-glance summary
+// rather than a breakdown.
+function computeCollapsedOverview(nestedRows) {
+  const groups = groupNestedRows(nestedRows);
+  return groups.map(g => ({
+    name: '#' + g.parent,
+    total_messages: g.summaryRow.total_messages,
+    unique_authors: g.summaryRow.unique_authors,
+    first_message: g.summaryRow.first_message,
+    last_message: g.summaryRow.last_message,
+  }));
 }
 
 function renderNestedTable() {
@@ -1581,19 +1591,31 @@ async function loadHeatmaps() {
 // ---------------------------------------------------------------------
 (async function init() {
   const summary = await fetchCSV('data/channel_stats_summary.csv');
-  if (summary) {
+  const nested = await fetchCSV('data/channel_stats_nested.csv');
+  nestedData = nested || [];
+
+  // Overview prefers the thread-rolled-in view (one row per channel) --
+  // falls back to the raw per-name summary only if nested.csv isn't
+  // available yet, so the tab still shows something rather than nothing.
+  if (nestedData.length > 0) {
+    overviewData = computeCollapsedOverview(nestedData);
+  } else if (summary) {
     overviewData = summary;
-    renderOverviewStats(summary);
-    renderTopBars(summary);
+  }
+
+  if (overviewData.length > 0) {
+    renderOverviewStats(overviewData);
+    renderTopBars(overviewData);
     renderOverviewTable();
-    renderLifespan(summary);
   } else {
     document.getElementById('overview-stats').innerHTML =
       '<div class="empty-state">Could not load data/channel_stats_summary.csv</div>';
   }
 
-  const nested = await fetchCSV('data/channel_stats_nested.csv');
-  nestedData = nested || [];
+  if (summary) {
+    renderLifespan(summary);
+  }
+
   renderNestedTable();
 
   await renderTrendsChart();
