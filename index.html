@@ -409,6 +409,7 @@
       <div class="controls" id="channel-timeseries-controls" style="align-items:center;">
         <button class="tab-btn gran-btn active" data-granularity="daily" style="padding:6px 14px; font-size:0.7rem;">Daily</button>
         <button class="tab-btn gran-btn" data-granularity="weekly" style="padding:6px 14px; font-size:0.7rem;">Weekly</button>
+        <button class="tab-btn gran-btn" data-granularity="monthly" style="padding:6px 14px; font-size:0.7rem;">Monthly</button>
         <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Showing top</span>
         <select id="channel-count-select" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:6px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
           <option value="5">5</option>
@@ -775,6 +776,7 @@ async function renderTrendsChart() {
 // ---------------------------------------------------------------------
 let dailyByParent = null;
 let weeklyByParent = null;
+let monthlyByParent = null;
 let channelTimeseriesChart = null;
 let currentGranularity = 'daily';
 
@@ -783,15 +785,25 @@ const CHANNEL_LINE_COLORS = [
   '#8a9a4f', '#a06ba8', '#b0813f', '#5f9a8a',
 ];
 
+function dateKeyFor(granularity) {
+  if (granularity === 'daily') return 'date';
+  if (granularity === 'weekly') return 'week_start';
+  return 'year_month';
+}
+
 function buildChannelTimeseries(rows, granularity) {
-  const dateKey = granularity === 'daily' ? 'date' : 'week_start';
+  const dateKey = dateKeyFor(granularity);
 
   const fromVal = document.getElementById('ts-date-from').value;
   const toVal = document.getElementById('ts-date-to').value;
+  // year_month rows are "YYYY-MM"; date/week_start rows are "YYYY-MM-DD".
+  // Trim the comparison values to match so string comparison stays valid.
+  const fromCmp = fromVal ? fromVal.slice(0, dateKey === 'year_month' ? 7 : 10) : null;
+  const toCmp = toVal ? toVal.slice(0, dateKey === 'year_month' ? 7 : 10) : null;
 
   let filteredRows = rows;
-  if (fromVal) filteredRows = filteredRows.filter(r => r[dateKey] >= fromVal);
-  if (toVal) filteredRows = filteredRows.filter(r => r[dateKey] <= toVal);
+  if (fromCmp) filteredRows = filteredRows.filter(r => r[dateKey] >= fromCmp);
+  if (toCmp) filteredRows = filteredRows.filter(r => r[dateKey] <= toCmp);
 
   // total per channel WITHIN the selected range, to pick the busiest ones
   const totalsByChannel = {};
@@ -830,10 +842,6 @@ function buildChannelTimeseries(rows, granularity) {
 }
 
 function setDateInputBounds() {
-  const allRows = [...(dailyByParent || []), ...(weeklyByParent || [])];
-  if (allRows.length === 0) return;
-  const key = 'date' in allRows[0] ? 'date' : 'week_start';
-  // dailyByParent uses 'date', weeklyByParent uses 'week_start' -- check both sets separately
   const dailyDates = (dailyByParent || []).map(r => r.date);
   const weeklyDates = (weeklyByParent || []).map(r => r.week_start);
   const combined = [...dailyDates, ...weeklyDates].filter(Boolean).sort();
@@ -847,19 +855,29 @@ function setDateInputBounds() {
   toInput.max = combined[combined.length - 1];
 }
 
+function rowsForGranularity(granularity) {
+  if (granularity === 'daily') return dailyByParent;
+  if (granularity === 'weekly') return weeklyByParent;
+  return monthlyByParent;
+}
+
+function fileHintFor(granularity) {
+  if (granularity === 'daily') return 'channel_stats_daily_by_parent.csv';
+  if (granularity === 'weekly') return 'channel_stats_weekly_by_parent.csv';
+  return 'channel_stats_monthly_by_parent.csv';
+}
+
 function renderChannelTimeseriesChart() {
-  const rows = currentGranularity === 'daily' ? dailyByParent : weeklyByParent;
+  const rows = rowsForGranularity(currentGranularity);
   const container = document.getElementById('channel-timeseries-container');
 
   if (!rows) {
-    const fileHint = currentGranularity === 'daily'
-      ? 'channel_stats_daily_by_parent.csv'
-      : 'channel_stats_weekly_by_parent.csv';
+    const fileHint = fileHintFor(currentGranularity);
     container.innerHTML = `
       <div class="empty-state">
         No <code>${fileHint}</code> found yet.<br><br>
         Run <code>build_parent_timeseries.py</code> against your
-        <code>channel_stats_raw.csv</code>, then drop both output files
+        <code>channel_stats_raw.csv</code>, then drop all three output files
         into the site's <code>/data</code> folder.
       </div>`;
     return;
@@ -916,6 +934,7 @@ document.getElementById('ts-date-reset')?.addEventListener('click', () => {
 async function loadChannelTimeseries() {
   dailyByParent = await fetchCSV('data/channel_stats_daily_by_parent.csv');
   weeklyByParent = await fetchCSV('data/channel_stats_weekly_by_parent.csv');
+  monthlyByParent = await fetchCSV('data/channel_stats_monthly_by_parent.csv');
   setDateInputBounds();
   renderChannelTimeseriesChart();
 }
