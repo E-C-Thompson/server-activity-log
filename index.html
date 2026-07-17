@@ -670,10 +670,19 @@
       <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
         Each channel's largest individual silent stretch -- an actual
         "quiet from this date to this date" period, not an average. Click a
-        channel to see its next 4 biggest gaps too.
+        channel to see its next 4 biggest gaps too. The Window filter finds
+        gaps that overlap the selected period (dates shown are always the
+        gap's true full extent, not clipped to the window).
       </p>
       <div class="controls" id="biggest-gaps-controls" style="align-items:center;">
-        <span style="color: var(--text-muted); font-size: 0.78rem;">Sort by:</span>
+        <span style="color: var(--text-muted); font-size: 0.78rem;">Window:</span>
+        <select id="biggest-gaps-window-select" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:6px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
+          <option value="all" selected>All time</option>
+          <option value="24">Last 2 years</option>
+          <option value="12">Last year</option>
+          <option value="6">Last 6 months</option>
+        </select>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Sort by:</span>
         <button class="tab-btn gran-btn active" data-gaps-sort="desc" style="padding:6px 14px; font-size:0.7rem;">Longest gap first</button>
         <button class="tab-btn gran-btn" data-gaps-sort="asc" style="padding:6px 14px; font-size:0.7rem;">Shortest gap first</button>
       </div>
@@ -1820,6 +1829,7 @@ document.querySelectorAll('#gap-rate-controls [data-gaprate-sort]').forEach(btn 
 // ---------------------------------------------------------------------
 let biggestGapsByParent = null;
 let biggestGapsSortDir = 'desc';
+let biggestGapsWindow = 'all';
 let expandedGapChannels = new Set();
 
 function groupBiggestGaps(rows) {
@@ -1837,6 +1847,17 @@ function groupBiggestGaps(rows) {
   return groups;
 }
 
+function getOverallMostRecentDate() {
+  if (!nestedData || nestedData.length === 0) return null;
+  const collapsed = computeCollapsedOverview(nestedData);
+  let maxMs = -Infinity;
+  collapsed.forEach(r => {
+    const t = new Date(r.last_message).getTime();
+    if (t > maxMs) maxMs = t;
+  });
+  return maxMs === -Infinity ? null : new Date(maxMs);
+}
+
 function renderBiggestGaps() {
   const container = document.getElementById('biggest-gaps-list');
   if (!biggestGapsByParent) {
@@ -1850,7 +1871,42 @@ function renderBiggestGaps() {
     return;
   }
 
-  const groups = groupBiggestGaps(biggestGapsByParent);
+  const groupsFull = groupBiggestGaps(biggestGapsByParent);
+
+  // Apply the window filter: keep only gaps that overlap the selected
+  // period, then re-rank each channel's remaining gaps and take the top 5.
+  // Dates displayed are always the gap's true full extent, never clipped.
+  let groups = groupsFull;
+  if (biggestGapsWindow !== 'all') {
+    const windowEnd = getOverallMostRecentDate();
+    if (windowEnd) {
+      const windowStart = new Date(windowEnd);
+      windowStart.setMonth(windowStart.getMonth() - parseInt(biggestGapsWindow, 10));
+
+      groups = {};
+      Object.keys(groupsFull).forEach(ch => {
+        const overlapping = groupsFull[ch].filter(g => {
+          const s = new Date(g.start);
+          const e = new Date(g.end);
+          return s <= windowEnd && e >= windowStart;
+        });
+        if (overlapping.length > 0) {
+          const reRanked = [...overlapping]
+            .sort((a, b) => b.hours - a.hours)
+            .slice(0, 5)
+            .map((g, i) => ({ ...g, rank: i + 1 }));
+          groups[ch] = reRanked;
+        }
+      });
+    }
+  }
+
+  const channelCount = Object.keys(groups).length;
+  if (channelCount === 0) {
+    container.innerHTML = '<div class="empty-state">No gaps overlap the selected window.</div>';
+    return;
+  }
+
   const sortMult = biggestGapsSortDir === 'asc' ? -1 : 1;
   const channels = Object.keys(groups).sort((a, b) => sortMult * (groups[b][0].hours - groups[a][0].hours));
 
@@ -1898,6 +1954,11 @@ function renderBiggestGaps() {
     });
   });
 }
+
+document.getElementById('biggest-gaps-window-select')?.addEventListener('change', (e) => {
+  biggestGapsWindow = e.target.value;
+  renderBiggestGaps();
+});
 
 document.querySelectorAll('#biggest-gaps-controls [data-gaps-sort]').forEach(btn => {
   btn.addEventListener('click', () => {
