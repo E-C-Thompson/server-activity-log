@@ -605,6 +605,28 @@
     </section>
 
     <section class="block">
+      <h2>Average Time Between Posts (Raw)</h2>
+      <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
+        A single whole-history number per channel, not broken out by time
+        period. Mean and Median can tell very different stories: a channel
+        with one big flurry of activity followed by a long dead stretch
+        will have a Mean dragged way up by that one huge gap, while the
+        Median better reflects the pace during the times it was actually
+        active. Not affected by any time window.
+      </p>
+      <div class="controls" id="gap-rate-controls" style="align-items:center;">
+        <button class="tab-btn gran-btn active" data-gaprate-stat="median" style="padding:6px 14px; font-size:0.7rem;">Median</button>
+        <button class="tab-btn gran-btn" data-gaprate-stat="mean" style="padding:6px 14px; font-size:0.7rem;">Mean</button>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Show:</span>
+        <button class="tab-btn gran-btn active" data-gaprate-sort="asc" style="padding:6px 14px; font-size:0.7rem;">Fastest pace</button>
+        <button class="tab-btn gran-btn" data-gaprate-sort="desc" style="padding:6px 14px; font-size:0.7rem;">Slowest pace</button>
+      </div>
+      <div id="gap-rate-bars" style="max-height: 640px; overflow-y: auto; padding-right: 6px;">
+        <div class="empty-state">Loading…</div>
+      </div>
+    </section>
+
+    <section class="block">
       <h2 id="lifespan-heading">Channel Lifespan</h2>
       <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
         Bars are clipped to the selected window so recent activity is
@@ -1605,9 +1627,71 @@ async function loadHeatmaps() {
   dailyGapByParent = await fetchCSV('data/channel_stats_avg_gap_daily_by_parent.csv');
   weeklyGapByParent = await fetchCSV('data/channel_stats_avg_gap_weekly_by_parent.csv');
   monthlyGapByParent = await fetchCSV('data/channel_stats_avg_gap_monthly_by_parent.csv');
+  overallGapByParent = await fetchCSV('data/channel_stats_gap_overall_by_parent.csv');
   renderDensityHeatmap();
   renderGapHeatmap();
+  renderGapRateChart();
 }
+
+let overallGapByParent = null;
+let gapRateState = { stat: 'median', sortDir: 'asc' };
+
+function fmtHours(h) {
+  if (h < 1) return Math.round(h * 60) + ' min';
+  if (h < 48) return h.toFixed(1) + ' hrs';
+  return (h / 24).toFixed(1) + ' days';
+}
+
+function renderGapRateChart() {
+  const container = document.getElementById('gap-rate-bars');
+  if (!overallGapByParent) {
+    container.innerHTML = `
+      <div class="empty-state">
+        No <code>channel_stats_gap_overall_by_parent.csv</code> found yet.<br><br>
+        Run <code>build_parent_timeseries.py</code> against your
+        <code>channel_stats_raw.csv</code>, then drop the resulting file
+        into the site's <code>/data</code> folder.
+      </div>`;
+    return;
+  }
+
+  const statKey = gapRateState.stat === 'mean' ? 'mean_gap_hours' : 'median_gap_hours';
+  const sortMult = gapRateState.sortDir === 'desc' ? -1 : 1;
+
+  const rows = overallGapByParent.map(r => ({
+    name: '#' + r.parent_channel,
+    value: Number(r[statKey]),
+    gapCount: Number(r.gap_count),
+  }));
+
+  const sorted = [...rows].sort((a, b) => sortMult * (b.value - a.value));
+  const max = sorted.reduce((m, r) => Math.max(m, r.value), 0) || 1;
+
+  container.innerHTML = sorted.map(r => `
+    <div class="bar-row">
+      <div class="bname" title="${r.name}">${r.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(r.value / max * 100).toFixed(1)}%"></div></div>
+      <div class="bcount">${fmtHours(r.value)}</div>
+    </div>
+  `).join('');
+}
+
+document.querySelectorAll('#gap-rate-controls [data-gaprate-stat]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#gap-rate-controls [data-gaprate-stat]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    gapRateState.stat = btn.dataset.gaprateStat;
+    renderGapRateChart();
+  });
+});
+document.querySelectorAll('#gap-rate-controls [data-gaprate-sort]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#gap-rate-controls [data-gaprate-sort]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    gapRateState.sortDir = btn.dataset.gaprateSort;
+    renderGapRateChart();
+  });
+});
 
 // ---------------------------------------------------------------------
 // AVERAGE POSTS PER DAY/WEEK/MONTH -- a single whole-history rate per
