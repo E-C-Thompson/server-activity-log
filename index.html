@@ -602,6 +602,27 @@
         <span class="swatch" style="background:#9a5240;"></span> that channel's slowest pace in view
       </div>
     </section>
+
+    <section class="block">
+      <h2>Average Posts Per Day</h2>
+      <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
+        A single raw average per channel -- total messages (threads included)
+        divided by days since the channel's first message, measured against
+        the server's most recent activity overall. Not affected by any time
+        window; this is the whole-history rate.
+      </p>
+      <div class="controls" id="post-rate-controls" style="align-items:center;">
+        <button class="tab-btn gran-btn active" data-rate-unit="day" style="padding:6px 14px; font-size:0.7rem;">Per Day</button>
+        <button class="tab-btn gran-btn" data-rate-unit="week" style="padding:6px 14px; font-size:0.7rem;">Per Week</button>
+        <button class="tab-btn gran-btn" data-rate-unit="month" style="padding:6px 14px; font-size:0.7rem;">Per Month</button>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Show:</span>
+        <button class="tab-btn gran-btn active" data-rate-sort="desc" style="padding:6px 14px; font-size:0.7rem;">Highest</button>
+        <button class="tab-btn gran-btn" data-rate-sort="asc" style="padding:6px 14px; font-size:0.7rem;">Lowest</button>
+      </div>
+      <div id="post-rate-bars" style="max-height: 640px; overflow-y: auto; padding-right: 6px;">
+        <div class="empty-state">Loading…</div>
+      </div>
+    </section>
   </div>
 
 <div class="heatmap-tooltip" id="heatmap-tooltip"></div>
@@ -712,7 +733,7 @@ function renderTopBars(data) {
   const top = [...data].sort((a, b) => Number(b.total_messages) - Number(a.total_messages));
   const max = Number(top[0].total_messages);
   const heading = document.getElementById('top-bars-heading');
-  if (heading) heading.textContent = `All ${top.length} Channels by Message Count`;
+  if (heading) heading.textContent = 'All Channels by Message Count';
   document.getElementById('top-bars').innerHTML = top.map(r => `
     <div class="bar-row">
       <div class="bname" title="${r.name}">${r.name}</div>
@@ -1589,6 +1610,86 @@ async function loadHeatmaps() {
 }
 
 // ---------------------------------------------------------------------
+// AVERAGE POSTS PER DAY/WEEK/MONTH -- a single whole-history rate per
+// channel, not tied to any adjustable time window.
+// ---------------------------------------------------------------------
+let postRateState = { unit: 'day', sortDir: 'desc' };
+
+function computePostRates(collapsedRows) {
+  // Measure every channel's rate against the SAME end point (the most
+  // recent activity anywhere in the server), rather than each channel's
+  // own last message -- otherwise a channel that died years ago would
+  // look deceptively "active" for the brief window it existed.
+  let todayMs = -Infinity;
+  collapsedRows.forEach(r => {
+    const t = new Date(r.last_message).getTime();
+    if (t > todayMs) todayMs = t;
+  });
+
+  return collapsedRows.map(r => {
+    const firstMs = new Date(r.first_message).getTime();
+    const daysSpan = Math.max(1, (todayMs - firstMs) / 86400000);
+    const perDay = Number(r.total_messages) / daysSpan;
+    return {
+      name: r.name,
+      total_messages: Number(r.total_messages),
+      perDay,
+      perWeek: perDay * 7,
+      perMonth: perDay * 30.44,
+    };
+  });
+}
+
+function renderPostRateChart() {
+  const container = document.getElementById('post-rate-bars');
+  if (!nestedData || nestedData.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        No <code>channel_stats_nested.csv</code> found yet.<br><br>
+        Run <code>nested_channel_summary.py</code> against your
+        <code>channel_stats_raw.csv</code>, then drop the resulting
+        <code>channel_stats_nested.csv</code> into the site's <code>/data</code> folder.
+      </div>`;
+    return;
+  }
+
+  const collapsed = computeCollapsedOverview(nestedData);
+  const rates = computePostRates(collapsed);
+
+  const unitKey = postRateState.unit === 'day' ? 'perDay' : (postRateState.unit === 'week' ? 'perWeek' : 'perMonth');
+  const unitLabel = postRateState.unit === 'day' ? '/ day' : (postRateState.unit === 'week' ? '/ week' : '/ month');
+  const sortMult = postRateState.sortDir === 'asc' ? -1 : 1;
+
+  const sorted = [...rates].sort((a, b) => sortMult * (b[unitKey] - a[unitKey]));
+  const max = sorted.reduce((m, r) => Math.max(m, r[unitKey]), 0) || 1;
+
+  container.innerHTML = sorted.map(r => `
+    <div class="bar-row">
+      <div class="bname" title="${r.name}">${r.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(r[unitKey] / max * 100).toFixed(1)}%"></div></div>
+      <div class="bcount">${r[unitKey].toFixed(r[unitKey] < 10 ? 2 : 1)} ${unitLabel}</div>
+    </div>
+  `).join('');
+}
+
+document.querySelectorAll('#post-rate-controls [data-rate-unit]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#post-rate-controls [data-rate-unit]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    postRateState.unit = btn.dataset.rateUnit;
+    renderPostRateChart();
+  });
+});
+document.querySelectorAll('#post-rate-controls [data-rate-sort]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#post-rate-controls [data-rate-sort]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    postRateState.sortDir = btn.dataset.rateSort;
+    renderPostRateChart();
+  });
+});
+
+// ---------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------
 (async function init() {
@@ -1619,6 +1720,7 @@ async function loadHeatmaps() {
   }
 
   renderNestedTable();
+  renderPostRateChart();
 
   await renderTrendsChart();
   await loadChannelTimeseries();
