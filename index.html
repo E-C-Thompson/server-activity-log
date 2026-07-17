@@ -401,9 +401,11 @@
     </section>
 
     <section class="block">
-      <h2>Channel Lifespan (first message → last message)</h2>
+      <h2>Channel Lifespan (last 12 months)</h2>
       <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
-        A quick way to spot channels that went quiet a long time ago vs. ones still active today.
+        Bars are clipped to the last year so recent activity is actually
+        readable. Channels with no messages at all in that window show
+        "quiet since" instead of a bar.
       </p>
       <div id="lifespan-container"></div>
     </section>
@@ -629,15 +631,55 @@ document.getElementById('search-nested').addEventListener('input', renderNestedT
 function renderLifespan(data) {
   const sorted = [...data].filter(r => !r.name.includes(' > ')).sort((a, b) => new Date(b.last_message) - new Date(a.last_message));
   const allDates = data.flatMap(r => [new Date(r.first_message), new Date(r.last_message)]).filter(d => !isNaN(d));
-  const minDate = new Date(Math.min(...allDates));
-  const maxDate = new Date(Math.max(...allDates));
-  const span = maxDate - minDate;
+  const overallMax = new Date(Math.max(...allDates));
 
-  document.getElementById('lifespan-container').innerHTML = sorted.slice(0, 40).map(r => {
+  // Window: last ~12 months, ending at the most recent message in the data
+  const windowEnd = overallMax;
+  const windowStart = new Date(windowEnd);
+  windowStart.setMonth(windowStart.getMonth() - 12);
+  const span = windowEnd - windowStart;
+
+  // Build month-tick axis labels across the window
+  const ticks = [];
+  const tickDate = new Date(windowStart);
+  tickDate.setDate(1);
+  while (tickDate <= windowEnd) {
+    ticks.push(new Date(tickDate));
+    tickDate.setMonth(tickDate.getMonth() + 1);
+  }
+  const axisHTML = `
+    <div class="lifespan-row" style="margin-bottom: 10px;">
+      <div class="lifespan-name"></div>
+      <div style="position: relative; height: 16px;">
+        ${ticks.map(t => {
+          const left = ((t - windowStart) / span * 100).toFixed(2);
+          return `<span style="position:absolute; left:${left}%; font-size:0.68rem; color:var(--text-muted); font-family:'IBM Plex Mono',monospace; transform: translateX(-4px);">${t.toLocaleString('en-US',{month:'short'})}</span>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  const barsHTML = sorted.slice(0, 40).map(r => {
     const start = new Date(r.first_message);
     const end = new Date(r.last_message);
-    const left = ((start - minDate) / span * 100).toFixed(2);
-    const width = Math.max(0.6, ((end - start) / span * 100)).toFixed(2);
+
+    if (end < windowStart) {
+      // No activity at all within the last 12 months
+      return `
+        <div class="lifespan-row">
+          <div class="lifespan-name" title="${r.name}">${r.name}</div>
+          <div class="lifespan-track" style="display:flex; align-items:center;">
+            <span style="font-size:0.72rem; color:var(--ember); padding-left:8px; font-family:'IBM Plex Mono',monospace;">quiet since ${shortDate(r.last_message)}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    const clippedStart = start < windowStart ? windowStart : start;
+    const clippedEnd = end > windowEnd ? windowEnd : end;
+    const left = ((clippedStart - windowStart) / span * 100).toFixed(2);
+    const width = Math.max(0.6, ((clippedEnd - clippedStart) / span * 100)).toFixed(2);
+
     return `
       <div class="lifespan-row">
         <div class="lifespan-name" title="${r.name}">${r.name}</div>
@@ -647,6 +689,8 @@ function renderLifespan(data) {
       </div>
     `;
   }).join('');
+
+  document.getElementById('lifespan-container').innerHTML = axisHTML + barsHTML;
 }
 
 async function renderTrendsChart() {
