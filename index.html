@@ -1901,8 +1901,8 @@ document.querySelectorAll('#post-rate-controls [data-rate-sort]').forEach(btn =>
       '<div class="empty-state">Could not load data/channel_stats_summary.csv</div>';
   }
 
-  if (summary) {
-    renderLifespan(summary);
+  if (overviewData.length > 0) {
+    renderLifespan(overviewData);
   }
 
   renderNestedTable();
