@@ -321,6 +321,78 @@
     text-overflow: ellipsis;
   }
 
+  .heatmap-wrap {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .heatmap-labels {
+    width: 190px;
+    flex-shrink: 0;
+    background: var(--bg-panel-raised);
+    border-right: 1px solid var(--border);
+  }
+  .heatmap-label-row {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .heatmap-scroll {
+    overflow-x: auto;
+    position: relative;
+    flex: 1;
+  }
+  .heatmap-axis {
+    height: 18px;
+    position: relative;
+    border-bottom: 1px solid var(--border);
+  }
+  .heatmap-axis span {
+    position: absolute;
+    top: 2px;
+    font-size: 0.66rem;
+    color: var(--text-muted);
+    font-family: 'IBM Plex Mono', monospace;
+    white-space: nowrap;
+  }
+  .heatmap-tooltip {
+    position: fixed;
+    background: var(--bg-panel-raised);
+    border: 1px solid var(--gold);
+    padding: 6px 10px;
+    font-size: 0.72rem;
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--text);
+    border-radius: 3px;
+    pointer-events: none;
+    z-index: 50;
+    display: none;
+    white-space: nowrap;
+  }
+  .heatmap-legend {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-family: 'IBM Plex Mono', monospace;
+    margin-top: 10px;
+  }
+  .heatmap-legend .swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    display: inline-block;
+  }
+
   footer {
     text-align: center;
     color: var(--text-muted);
@@ -447,7 +519,86 @@
       </div>
       <div id="lifespan-container"></div>
     </section>
+
+    <section class="block">
+      <h2>Activity Density Heatmap</h2>
+      <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
+        Shows actual message volume per period, so gaps inside a channel's
+        active-looking span are visible instead of hidden by a solid bar.
+        Color is scaled per channel (relative to that channel's own busiest
+        period in view), so quiet channels aren't washed out by #general.
+      </p>
+      <div class="controls" id="density-controls" style="align-items:center;">
+        <button class="tab-btn gran-btn active" data-density-gran="daily" style="padding:6px 14px; font-size:0.7rem;">Daily</button>
+        <button class="tab-btn gran-btn" data-density-gran="weekly" style="padding:6px 14px; font-size:0.7rem;">Weekly</button>
+        <button class="tab-btn gran-btn" data-density-gran="monthly" style="padding:6px 14px; font-size:0.7rem;">Monthly</button>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Window:</span>
+        <select id="density-window-select" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:6px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
+          <option value="all">All time</option>
+          <option value="60">5 years</option>
+          <option value="24">2 years</option>
+          <option value="12" selected>1 year</option>
+          <option value="6">6 months</option>
+        </select>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Rows:</span>
+        <select id="density-rows-select" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:6px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
+          <option value="10">Top 10</option>
+          <option value="20" selected>Top 20</option>
+          <option value="50">Top 50</option>
+          <option value="all">All channels</option>
+        </select>
+      </div>
+      <div id="density-heatmap-outer">
+        <div class="empty-state">Loading…</div>
+      </div>
+      <div class="heatmap-legend">
+        <span class="swatch" style="background:#120e0b;"></span> no messages
+        <span class="swatch" style="background:#4f7a6b44;"></span> low (for that channel)
+        <span class="swatch" style="background:#c8a032;"></span> that channel's busiest period in view
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Average Time Between Posts</h2>
+      <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
+        A different signal from volume: how far apart messages land, on
+        average, within each period. A channel can post the same total
+        count steadily or in one burst -- this shows which. Color is also
+        scaled per channel, relative to its own fastest and slowest pace
+        in view.
+      </p>
+      <div class="controls" id="gap-controls" style="align-items:center;">
+        <button class="tab-btn gran-btn active" data-gap-gran="daily" style="padding:6px 14px; font-size:0.7rem;">Daily</button>
+        <button class="tab-btn gran-btn" data-gap-gran="weekly" style="padding:6px 14px; font-size:0.7rem;">Weekly</button>
+        <button class="tab-btn gran-btn" data-gap-gran="monthly" style="padding:6px 14px; font-size:0.7rem;">Monthly</button>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Window:</span>
+        <select id="gap-window-select" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:6px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
+          <option value="all">All time</option>
+          <option value="60">5 years</option>
+          <option value="24">2 years</option>
+          <option value="12" selected>1 year</option>
+          <option value="6">6 months</option>
+        </select>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Rows:</span>
+        <select id="gap-rows-select" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:6px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
+          <option value="10">Top 10</option>
+          <option value="20" selected>Top 20</option>
+          <option value="50">Top 50</option>
+          <option value="all">All channels</option>
+        </select>
+      </div>
+      <div id="gap-heatmap-outer">
+        <div class="empty-state">Loading…</div>
+      </div>
+      <div class="heatmap-legend">
+        <span class="swatch" style="background:#120e0b;"></span> no data in that period
+        <span class="swatch" style="background:#c8a032;"></span> that channel's fastest pace in view
+        <span class="swatch" style="background:#9a5240;"></span> that channel's slowest pace in view
+      </div>
+    </section>
   </div>
+
+<div class="heatmap-tooltip" id="heatmap-tooltip"></div>
 
 </main>
 
@@ -1047,6 +1198,331 @@ async function loadChannelTimeseries() {
 }
 
 // ---------------------------------------------------------------------
+// DENSITY + AVG-GAP HEATMAPS
+// ---------------------------------------------------------------------
+let dailyGapByParent = null;
+let weeklyGapByParent = null;
+let monthlyGapByParent = null;
+
+let densityState = { granularity: 'daily', window: '12', rows: '20' };
+let gapState = { granularity: 'daily', window: '12', rows: '20' };
+
+function getCountRows(granularity) {
+  if (granularity === 'daily') return dailyByParent;
+  if (granularity === 'weekly') return weeklyByParent;
+  return monthlyByParent;
+}
+function getGapRows(granularity) {
+  if (granularity === 'daily') return dailyGapByParent;
+  if (granularity === 'weekly') return weeklyGapByParent;
+  return monthlyGapByParent;
+}
+function dateKeyForGran(granularity) {
+  if (granularity === 'daily') return 'date';
+  if (granularity === 'weekly') return 'week_start';
+  return 'year_month';
+}
+function fileHintForGranularity(g) {
+  if (g === 'daily') return 'channel_stats_daily_by_parent.csv';
+  if (g === 'weekly') return 'channel_stats_weekly_by_parent.csv';
+  return 'channel_stats_monthly_by_parent.csv';
+}
+function fileHintForGapGranularity(g) {
+  if (g === 'daily') return 'channel_stats_avg_gap_daily_by_parent.csv';
+  if (g === 'weekly') return 'channel_stats_avg_gap_weekly_by_parent.csv';
+  return 'channel_stats_avg_gap_monthly_by_parent.csv';
+}
+
+function resolveWindowGeneric(overallMin, overallMax, windowSetting) {
+  const windowEnd = overallMax;
+  let windowStart;
+  if (windowSetting === 'all') {
+    windowStart = overallMin;
+  } else {
+    windowStart = new Date(windowEnd);
+    windowStart.setUTCMonth(windowStart.getUTCMonth() - parseInt(windowSetting, 10));
+    if (windowStart < overallMin) windowStart = overallMin;
+  }
+  return { windowStart, windowEnd };
+}
+
+function computeAdaptiveTicks(windowStart, windowEnd) {
+  const spanMonths = (windowEnd - windowStart) / (1000 * 60 * 60 * 24 * 30.44);
+  let tickStepMonths = 1;
+  if (spanMonths > 60) tickStepMonths = 12;
+  else if (spanMonths > 24) tickStepMonths = 6;
+  else if (spanMonths > 12) tickStepMonths = 2;
+
+  const ticks = [];
+  const tickDate = new Date(Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth(), 1));
+  while (tickDate <= windowEnd) {
+    ticks.push(new Date(tickDate));
+    tickDate.setUTCMonth(tickDate.getUTCMonth() + tickStepMonths);
+  }
+  const labelFmt = tickStepMonths === 12
+    ? (t => t.getUTCFullYear().toString())
+    : (t => t.toLocaleString('en-US', { month: 'short', year: spanMonths > 24 ? '2-digit' : undefined, timeZone: 'UTC' }));
+  return { ticks, labelFmt };
+}
+
+function buildBucketKeys(windowStart, windowEnd, granularity) {
+  const pad = n => String(n).padStart(2, '0');
+  const keys = [];
+
+  if (granularity === 'daily') {
+    let cur = Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth(), windowStart.getUTCDate());
+    const end = Date.UTC(windowEnd.getUTCFullYear(), windowEnd.getUTCMonth(), windowEnd.getUTCDate());
+    while (cur <= end) {
+      const dt = new Date(cur);
+      keys.push(`${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`);
+      cur += 86400000;
+    }
+  } else if (granularity === 'weekly') {
+    const dt = new Date(Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth(), windowStart.getUTCDate()));
+    const dow = (dt.getUTCDay() + 6) % 7; // Monday = 0
+    dt.setUTCDate(dt.getUTCDate() - dow);
+    const end = Date.UTC(windowEnd.getUTCFullYear(), windowEnd.getUTCMonth(), windowEnd.getUTCDate());
+    while (dt.getTime() <= end) {
+      keys.push(`${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`);
+      dt.setUTCDate(dt.getUTCDate() + 7);
+    }
+  } else {
+    let y = windowStart.getUTCFullYear();
+    let m = windowStart.getUTCMonth();
+    const endY = windowEnd.getUTCFullYear();
+    const endM = windowEnd.getUTCMonth();
+    while (y < endY || (y === endY && m <= endM)) {
+      keys.push(`${y}-${pad(m + 1)}`);
+      m++;
+      if (m > 11) { m = 0; y++; }
+    }
+  }
+  return keys;
+}
+
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
+}
+
+function lerpColor(hexA, hexB, t) {
+  const a = hexToRgb(hexA), b = hexToRgb(hexB);
+  const r = Math.round(a.r + (b.r - a.r) * t);
+  const g = Math.round(a.g + (b.g - a.g) * t);
+  const bl = Math.round(a.b + (b.b - a.b) * t);
+  return `rgb(${r}, ${g}, ${bl})`;
+}
+
+function colorForRatio(ratio, colorMode) {
+  ratio = Math.max(0, Math.min(1, ratio));
+  if (colorMode === 'count') {
+    // dim teal (low) -> bright gold (this channel's busiest period in view)
+    return ratio < 0.5
+      ? lerpColor('#2b4a42', '#4f7a6b', ratio * 2)
+      : lerpColor('#4f7a6b', '#e8c15a', (ratio - 0.5) * 2);
+  } else {
+    // gold (fastest pace) -> ember (slowest pace)
+    return lerpColor('#c8a032', '#9a5240', ratio);
+  }
+}
+
+function renderHeatmap(outerId, state, valueRows, rankingRows, valueField, colorMode, fileHint) {
+  const outer = document.getElementById(outerId);
+
+  if (!valueRows || !rankingRows) {
+    outer.innerHTML = `
+      <div class="empty-state">
+        No <code>${fileHint}</code> found yet.<br><br>
+        Run <code>build_parent_timeseries.py</code> against your
+        <code>channel_stats_raw.csv</code>, then drop the output files into
+        the site's <code>/data</code> folder.
+      </div>`;
+    return;
+  }
+
+  const dateKey = dateKeyForGran(state.granularity);
+  const toDateObj = k => new Date((dateKey === 'year_month' ? k + '-01' : k) + 'T00:00:00Z');
+
+  const allDates = rankingRows.map(r => r[dateKey]).filter(Boolean);
+  if (allDates.length === 0) {
+    outer.innerHTML = '<div class="empty-state">No data available.</div>';
+    return;
+  }
+  const dateObjs = allDates.map(toDateObj);
+  const overallMin = new Date(Math.min(...dateObjs));
+  const overallMax = new Date(Math.max(...dateObjs));
+
+  const { windowStart, windowEnd } = resolveWindowGeneric(overallMin, overallMax, state.window);
+
+  const totalsByChannel = {};
+  rankingRows.forEach(r => {
+    const d = toDateObj(r[dateKey]);
+    if (d >= windowStart && d <= windowEnd) {
+      totalsByChannel[r.parent_channel] = (totalsByChannel[r.parent_channel] || 0) + Number(r.message_count);
+    }
+  });
+
+  let channels = Object.keys(totalsByChannel).sort((a, b) => totalsByChannel[b] - totalsByChannel[a]);
+  if (state.rows !== 'all') channels = channels.slice(0, parseInt(state.rows, 10));
+
+  if (channels.length === 0) {
+    outer.innerHTML = '<div class="empty-state">No channels with activity in the selected window.</div>';
+    return;
+  }
+
+  const buckets = buildBucketKeys(windowStart, windowEnd, state.granularity);
+
+  const lookup = {};
+  channels.forEach(ch => { lookup[ch] = {}; });
+  valueRows.forEach(r => {
+    if (lookup[r.parent_channel]) {
+      lookup[r.parent_channel][r[dateKey]] = Number(r[valueField]);
+    }
+  });
+
+  const rowStats = {};
+  channels.forEach(ch => {
+    const vals = buckets.map(b => lookup[ch][b]).filter(v => v !== undefined && !isNaN(v));
+    rowStats[ch] = {
+      min: vals.length ? Math.min(...vals) : 0,
+      max: vals.length ? Math.max(...vals) : 0,
+    };
+  });
+
+  const rowHeight = 16;
+  const cellWidth = state.granularity === 'daily' ? 4 : (state.granularity === 'weekly' ? 9 : 24);
+  const canvasWidth = Math.max(buckets.length * cellWidth, 200);
+  const canvasHeight = channels.length * rowHeight;
+
+  outer.innerHTML = `
+    <div class="heatmap-wrap">
+      <div class="heatmap-labels">
+        <div class="heatmap-label-row" style="height:18px; border-bottom:1px solid var(--border);"></div>
+        ${channels.map(ch => `<div class="heatmap-label-row" style="height:${rowHeight}px;" title="#${ch}">#${ch}</div>`).join('')}
+      </div>
+      <div class="heatmap-scroll">
+        <div class="heatmap-axis" id="${outerId}-axis" style="width:${canvasWidth}px;"></div>
+        <canvas id="${outerId}-canvas" width="${canvasWidth}" height="${canvasHeight}" style="display:block;"></canvas>
+      </div>
+    </div>
+  `;
+
+  const { ticks, labelFmt } = computeAdaptiveTicks(windowStart, windowEnd);
+  const span = windowEnd - windowStart;
+  const axisEl = document.getElementById(`${outerId}-axis`);
+  axisEl.innerHTML = ticks.map(t => {
+    const left = ((t - windowStart) / span * canvasWidth).toFixed(1);
+    return `<span style="left:${left}px;">${labelFmt(t)}</span>`;
+  }).join('');
+
+  const canvas = document.getElementById(`${outerId}-canvas`);
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+  channels.forEach((ch, rowIdx) => {
+    const { min: rowMin, max: rowMax } = rowStats[ch];
+    buckets.forEach((b, colIdx) => {
+      const v = lookup[ch][b];
+      if (v === undefined || isNaN(v)) return; // no data -- leave it blank
+      let ratio;
+      if (colorMode === 'count') {
+        ratio = rowMax > 0 ? v / rowMax : 0;
+      } else {
+        ratio = (rowMax > rowMin) ? (v - rowMin) / (rowMax - rowMin) : (rowMax > 0 ? 1 : 0);
+      }
+      ctx.fillStyle = colorForRatio(ratio, colorMode);
+      ctx.fillRect(colIdx * cellWidth, rowIdx * rowHeight, Math.max(cellWidth - 1, 1), rowHeight - 1);
+    });
+  });
+
+  const tooltip = document.getElementById('heatmap-tooltip');
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const colIdx = Math.floor(x / cellWidth);
+    const rowIdx = Math.floor(y / rowHeight);
+    if (rowIdx < 0 || rowIdx >= channels.length || colIdx < 0 || colIdx >= buckets.length) {
+      tooltip.style.display = 'none';
+      return;
+    }
+    const ch = channels[rowIdx];
+    const b = buckets[colIdx];
+    const v = lookup[ch][b];
+    if (v === undefined || isNaN(v)) {
+      tooltip.innerHTML = `#${ch}<br>${b}<br>no data`;
+    } else if (colorMode === 'count') {
+      tooltip.innerHTML = `#${ch}<br>${b}<br>${fmt(v)} messages`;
+    } else {
+      tooltip.innerHTML = `#${ch}<br>${b}<br>avg gap: ${v.toFixed(1)}h`;
+    }
+    tooltip.style.left = (e.clientX + 14) + 'px';
+    tooltip.style.top = (e.clientY + 14) + 'px';
+    tooltip.style.display = 'block';
+  };
+  canvas.onmouseleave = () => { tooltip.style.display = 'none'; };
+}
+
+function renderDensityHeatmap() {
+  const rows = getCountRows(densityState.granularity);
+  renderHeatmap('density-heatmap-outer', densityState, rows, rows, 'message_count', 'count',
+    fileHintForGranularity(densityState.granularity));
+}
+
+function renderGapHeatmap() {
+  const gapRows = getGapRows(gapState.granularity);
+  const countRows = getCountRows(gapState.granularity); // ranking always by message volume
+  renderHeatmap('gap-heatmap-outer', gapState, gapRows, countRows, 'avg_gap_hours', 'gap',
+    fileHintForGapGranularity(gapState.granularity));
+}
+
+document.querySelectorAll('#density-controls [data-density-gran]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#density-controls [data-density-gran]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    densityState.granularity = btn.dataset.densityGran;
+    renderDensityHeatmap();
+  });
+});
+document.getElementById('density-window-select')?.addEventListener('change', (e) => {
+  densityState.window = e.target.value;
+  renderDensityHeatmap();
+});
+document.getElementById('density-rows-select')?.addEventListener('change', (e) => {
+  densityState.rows = e.target.value;
+  renderDensityHeatmap();
+});
+
+document.querySelectorAll('#gap-controls [data-gap-gran]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#gap-controls [data-gap-gran]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    gapState.granularity = btn.dataset.gapGran;
+    renderGapHeatmap();
+  });
+});
+document.getElementById('gap-window-select')?.addEventListener('change', (e) => {
+  gapState.window = e.target.value;
+  renderGapHeatmap();
+});
+document.getElementById('gap-rows-select')?.addEventListener('change', (e) => {
+  gapState.rows = e.target.value;
+  renderGapHeatmap();
+});
+
+async function loadHeatmaps() {
+  dailyGapByParent = await fetchCSV('data/channel_stats_avg_gap_daily_by_parent.csv');
+  weeklyGapByParent = await fetchCSV('data/channel_stats_avg_gap_weekly_by_parent.csv');
+  monthlyGapByParent = await fetchCSV('data/channel_stats_avg_gap_monthly_by_parent.csv');
+  renderDensityHeatmap();
+  renderGapHeatmap();
+}
+
+// ---------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------
 (async function init() {
@@ -1068,6 +1544,7 @@ async function loadChannelTimeseries() {
 
   await renderTrendsChart();
   await loadChannelTimeseries();
+  await loadHeatmaps();
 })();
 </script>
 
