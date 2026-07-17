@@ -621,7 +621,7 @@
         <button class="tab-btn gran-btn active" data-window="12" style="padding:6px 14px; font-size:0.7rem;">1 year</button>
         <button class="tab-btn gran-btn" data-window="6" style="padding:6px 14px; font-size:0.7rem;">6 months</button>
       </div>
-      <div id="lifespan-container"></div>
+      <div id="lifespan-container" style="max-height: 640px; overflow-y: auto; padding-right: 6px;"></div>
     </section>
   </div>
 
@@ -974,7 +974,7 @@ function renderLifespan(data) {
     </div>
   `;
 
-  const barsHTML = sorted.slice(0, 40).map(r => {
+  const barsHTML = sorted.map(r => {
     const start = new Date(r.first_message);
     const end = new Date(r.last_message);
 
