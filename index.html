@@ -426,8 +426,8 @@
     <div class="stat-row" id="overview-stats"></div>
 
     <section class="block">
-      <h2>Top 20 by Message Count</h2>
-      <div id="top-bars"></div>
+      <h2 id="top-bars-heading">All Channels by Message Count</h2>
+      <div id="top-bars" style="max-height: 640px; overflow-y: auto; padding-right: 6px;"></div>
     </section>
 
     <section class="block">
@@ -709,8 +709,10 @@ function renderOverviewStats(data) {
 }
 
 function renderTopBars(data) {
-  const top = [...data].sort((a, b) => Number(b.total_messages) - Number(a.total_messages)).slice(0, 20);
+  const top = [...data].sort((a, b) => Number(b.total_messages) - Number(a.total_messages));
   const max = Number(top[0].total_messages);
+  const heading = document.getElementById('top-bars-heading');
+  if (heading) heading.textContent = `All ${top.length} Channels by Message Count`;
   document.getElementById('top-bars').innerHTML = top.map(r => `
     <div class="bar-row">
       <div class="bname" title="${r.name}">${r.name}</div>
