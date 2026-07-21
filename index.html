@@ -692,6 +692,27 @@
     </section>
 
     <section class="block">
+      <h2>Author Concentration</h2>
+      <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
+        Two channels can have the same total message count and still tell
+        very different stories -- one a broad discussion, the other really
+        just 1-2 people generating most of the volume. Shares are not tied
+        to who the posters are, just how concentrated the activity is.
+      </p>
+      <div class="controls" id="author-conc-controls" style="align-items:center;">
+        <button class="tab-btn gran-btn" data-conc-metric="messages_per_author" style="padding:6px 14px; font-size:0.7rem;">Messages / Author</button>
+        <button class="tab-btn gran-btn active" data-conc-metric="top1_share_pct" style="padding:6px 14px; font-size:0.7rem;">Top 1 Share</button>
+        <button class="tab-btn gran-btn" data-conc-metric="top3_share_pct" style="padding:6px 14px; font-size:0.7rem;">Top 3 Share</button>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Show:</span>
+        <button class="tab-btn gran-btn active" data-conc-sort="desc" style="padding:6px 14px; font-size:0.7rem;">Most concentrated</button>
+        <button class="tab-btn gran-btn" data-conc-sort="asc" style="padding:6px 14px; font-size:0.7rem;">Most varied</button>
+      </div>
+      <div id="author-conc-list" style="max-height: 640px; overflow-y: auto; padding-right: 6px;">
+        <div class="empty-state">Loading…</div>
+      </div>
+    </section>
+
+    <section class="block">
       <h2 id="lifespan-heading">Channel Lifespan</h2>
       <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
         Bars are clipped to the selected window so recent activity is
@@ -1758,10 +1779,12 @@ async function loadHeatmaps() {
   monthlyGapByParent = await fetchCSV('data/channel_stats_avg_gap_monthly_by_parent.csv');
   overallGapByParent = await fetchCSV('data/channel_stats_gap_overall_by_parent.csv');
   biggestGapsByParent = await fetchCSV('data/channel_stats_biggest_gaps_by_parent.csv');
+  authorConcentrationByParent = await fetchCSV('data/channel_stats_author_concentration_by_parent.csv');
   renderDensityHeatmap();
   renderGapHeatmap();
   renderGapRateChart();
   renderBiggestGaps();
+  renderAuthorConcentration();
 }
 
 let overallGapByParent = null;
@@ -1966,6 +1989,74 @@ document.querySelectorAll('#biggest-gaps-controls [data-gaps-sort]').forEach(btn
     btn.classList.add('active');
     biggestGapsSortDir = btn.dataset.gapsSort;
     renderBiggestGaps();
+  });
+});
+
+// ---------------------------------------------------------------------
+// AUTHOR CONCENTRATION -- messages per author, and what share of a
+// channel's volume comes from its top 1 / top 3 posters.
+// ---------------------------------------------------------------------
+let authorConcentrationByParent = null;
+let authorConcState = { metric: 'top1_share_pct', sortDir: 'desc' };
+
+function fmtConcMetric(metric, value) {
+  if (metric === 'messages_per_author') return value.toFixed(1) + ' msgs/author';
+  return value.toFixed(1) + '%';
+}
+
+function renderAuthorConcentration() {
+  const container = document.getElementById('author-conc-list');
+  if (!authorConcentrationByParent) {
+    container.innerHTML = `
+      <div class="empty-state">
+        No <code>channel_stats_author_concentration_by_parent.csv</code> found yet.<br><br>
+        Run <code>build_parent_timeseries.py</code> against your
+        <code>channel_stats_raw.csv</code>, then drop the resulting file
+        into the site's <code>/data</code> folder.
+      </div>`;
+    return;
+  }
+
+  const metric = authorConcState.metric;
+  const sortMult = authorConcState.sortDir === 'asc' ? -1 : 1;
+
+  const rows = authorConcentrationByParent.map(r => ({
+    name: '#' + r.parent_channel,
+    value: Number(r[metric]),
+    uniqueAuthors: Number(r.unique_authors),
+    totalMessages: Number(r.total_messages),
+  }));
+
+  const sorted = [...rows].sort((a, b) => sortMult * (b.value - a.value));
+
+  container.innerHTML = sorted.map((r, i) => `
+    <div style="display:flex; align-items:center; padding:8px 4px; border-bottom:1px solid var(--border); font-size:0.85rem;">
+      <span style="font-family:'IBM Plex Mono',monospace; color:var(--text-muted); width:28px; flex-shrink:0;">${i + 1}</span>
+      <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${r.name}">${r.name}</span>
+      <span style="font-family:'IBM Plex Mono',monospace; color:var(--text-muted); font-size:0.78rem; margin-right:14px;">
+        ${r.uniqueAuthors} authors, ${fmt(r.totalMessages)} msgs
+      </span>
+      <span style="font-family:'IBM Plex Mono',monospace; color:var(--gold-bright); font-weight:600; text-align:right; min-width:110px;">
+        ${fmtConcMetric(metric, r.value)}
+      </span>
+    </div>
+  `).join('');
+}
+
+document.querySelectorAll('#author-conc-controls [data-conc-metric]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#author-conc-controls [data-conc-metric]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    authorConcState.metric = btn.dataset.concMetric;
+    renderAuthorConcentration();
+  });
+});
+document.querySelectorAll('#author-conc-controls [data-conc-sort]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#author-conc-controls [data-conc-sort]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    authorConcState.sortDir = btn.dataset.concSort;
+    renderAuthorConcentration();
   });
 });
 
