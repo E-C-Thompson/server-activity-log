@@ -724,6 +724,30 @@
     </section>
 
     <section class="block">
+      <h2>Activity Bursts</h2>
+      <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
+        Rolling 24-hour windows of unusually heavy activity. There's no way
+        to tell from message metadata alone whether a burst was a heated
+        exchange or an excited celebration -- that needs actual message
+        content, which isn't stored -- but the shape of a burst is a decent
+        clue: a high top-1 share plus a high reply ratio and few reactions
+        suggests one person going back and forth with several others,
+        while low concentration plus lots of reactions suggests something
+        more like a group celebration. Fixed ranks by raw burst size;
+        Relative ranks by how unusual the burst was for that specific
+        channel's own normal pace -- the two can surface very different
+        channels.
+      </p>
+      <div class="controls" id="bursts-controls" style="align-items:center;">
+        <button class="tab-btn gran-btn active" data-burst-rank="fixed" style="padding:6px 14px; font-size:0.7rem;">Fixed (raw size)</button>
+        <button class="tab-btn gran-btn" data-burst-rank="relative" style="padding:6px 14px; font-size:0.7rem;">Relative (vs. own pace)</button>
+      </div>
+      <div id="bursts-list" style="max-height: 640px; overflow-y: auto; padding-right: 6px;">
+        <div class="empty-state">Loading…</div>
+      </div>
+    </section>
+
+    <section class="block">
       <h2 id="lifespan-heading">Channel Lifespan</h2>
       <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: -8px;">
         Bars are clipped to the selected window so recent activity is
@@ -1792,11 +1816,13 @@ async function loadHeatmaps() {
   biggestGapsByParent = await fetchCSV('data/channel_stats_biggest_gaps_by_parent.csv');
   authorConcentrationByParent = await fetchCSV('data/channel_stats_author_concentration_by_parent.csv');
   authorMonthByParent = await fetchCSV('data/channel_stats_author_month_by_parent.csv');
+  burstsByParent = await fetchCSV('data/channel_stats_bursts_by_parent.csv');
   renderDensityHeatmap();
   renderGapHeatmap();
   renderGapRateChart();
   renderBiggestGaps();
   renderAuthorConcentration();
+  renderBursts();
 }
 
 let overallGapByParent = null;
@@ -2137,6 +2163,119 @@ document.querySelectorAll('#author-conc-controls [data-conc-sort]').forEach(btn 
     btn.classList.add('active');
     authorConcState.sortDir = btn.dataset.concSort;
     renderAuthorConcentration();
+  });
+});
+
+// ---------------------------------------------------------------------
+// ACTIVITY BURSTS -- rolling 24-hour windows of unusually heavy activity.
+// ---------------------------------------------------------------------
+let burstsByParent = null;
+let burstRankMode = 'fixed';
+let expandedBurstChannels = new Set();
+
+function groupBursts(rows) {
+  const groups = {};
+  rows.forEach(r => {
+    if (!groups[r.parent_channel]) groups[r.parent_channel] = [];
+    groups[r.parent_channel].push({
+      rank: Number(r.rank),
+      start: r.burst_start,
+      end: r.burst_end,
+      messageCount: Number(r.message_count),
+      participants: Number(r.unique_participants),
+      top1SharePct: Number(r.top1_share_pct),
+      replyRatioPct: Number(r.reply_ratio_pct),
+      avgReactions: Number(r.avg_reactions),
+      spikeRatio: Number(r.spike_ratio),
+    });
+  });
+  return groups;
+}
+
+function renderBursts() {
+  const container = document.getElementById('bursts-list');
+  if (!burstsByParent) {
+    container.innerHTML = `
+      <div class="empty-state">
+        No <code>channel_stats_bursts_by_parent.csv</code> found yet.<br><br>
+        Run <code>build_parent_timeseries.py</code> against your
+        <code>channel_stats_raw.csv</code>, then drop the resulting file
+        into the site's <code>/data</code> folder.
+      </div>`;
+    return;
+  }
+
+  if (burstsByParent.length === 0) {
+    container.innerHTML = '<div class="empty-state">No bursts detected in this data.</div>';
+    return;
+  }
+
+  const groups = groupBursts(burstsByParent);
+  const metricKey = burstRankMode === 'fixed' ? 'messageCount' : 'spikeRatio';
+
+  // Re-sort each channel's own bursts by the active metric, so the
+  // collapsed "headline" burst matches the selected ranking lens.
+  Object.values(groups).forEach(list => list.sort((a, b) => b[metricKey] - a[metricKey]));
+  const channels = Object.keys(groups).sort((a, b) => groups[b][0][metricKey] - groups[a][0][metricKey]);
+
+  function fmtBurstMetrics(b) {
+    const flagged = b.top1SharePct >= 35 && b.replyRatioPct >= 60 && b.avgReactions < 1;
+    const flagColor = flagged ? 'color: var(--ember);' : 'color: var(--text-muted);';
+    return `
+      <span style="font-family:'IBM Plex Mono',monospace; font-size:0.75rem; ${flagColor}">
+        ${fmt(b.messageCount)} msgs · ${b.participants} people · top-1: ${b.top1SharePct.toFixed(0)}% · replies: ${b.replyRatioPct.toFixed(0)}% · reactions: ${b.avgReactions.toFixed(1)}/msg
+        ${burstRankMode === 'relative' ? ` · ${b.spikeRatio.toFixed(1)}x normal` : ''}
+      </span>`;
+  }
+
+  container.innerHTML = channels.map(ch => {
+    const bursts = groups[ch];
+    const headline = bursts[0];
+    const isExpanded = expandedBurstChannels.has(ch);
+    const hasMore = bursts.length > 1;
+    const arrow = hasMore ? (isExpanded ? '▾' : '▸') : '';
+
+    const headerRow = `
+      <div style="padding:9px 4px; border-bottom:1px solid var(--border); ${hasMore ? 'cursor:pointer;' : ''}"
+           ${hasMore ? `data-toggle-burst-channel="${ch}"` : ''}>
+        <div style="display:flex; align-items:center;">
+          <span style="width:20px; color:var(--gold-bright);">${arrow}</span>
+          <span style="flex:1; font-size:0.85rem;">#${ch}</span>
+          <span style="font-family:'IBM Plex Mono',monospace; color:var(--gold-bright); font-weight:600; font-size:0.8rem;">
+            ${shortDate(headline.start)} → ${shortDate(headline.end)}
+          </span>
+        </div>
+        <div style="padding-left:20px; margin-top:3px;">${fmtBurstMetrics(headline)}</div>
+      </div>`;
+
+    const childRows = (hasMore && isExpanded) ? bursts.slice(1).map(b => `
+      <div style="padding:7px 4px 7px 26px; border-bottom:1px solid rgba(255,255,255,0.03);">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:0.78rem; color:var(--text-muted);">
+          ${shortDate(b.start)} → ${shortDate(b.end)}
+        </div>
+        <div style="margin-top:2px;">${fmtBurstMetrics(b)}</div>
+      </div>
+    `).join('') : '';
+
+    return headerRow + childRows;
+  }).join('');
+
+  container.querySelectorAll('[data-toggle-burst-channel]').forEach(row => {
+    row.addEventListener('click', () => {
+      const ch = row.dataset.toggleBurstChannel;
+      if (expandedBurstChannels.has(ch)) expandedBurstChannels.delete(ch);
+      else expandedBurstChannels.add(ch);
+      renderBursts();
+    });
+  });
+}
+
+document.querySelectorAll('#bursts-controls [data-burst-rank]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#bursts-controls [data-burst-rank]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    burstRankMode = btn.dataset.burstRank;
+    renderBursts();
   });
 });
 
