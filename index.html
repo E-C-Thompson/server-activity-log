@@ -741,6 +741,13 @@
       <div class="controls" id="bursts-controls" style="align-items:center;">
         <button class="tab-btn gran-btn active" data-burst-rank="fixed" style="padding:6px 14px; font-size:0.7rem;">Fixed (raw size)</button>
         <button class="tab-btn gran-btn" data-burst-rank="relative" style="padding:6px 14px; font-size:0.7rem;">Relative (vs. own pace)</button>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Window:</span>
+        <select id="bursts-window-select" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:6px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
+          <option value="all" selected>All time</option>
+          <option value="24">Last 2 years</option>
+          <option value="12">Last year</option>
+          <option value="6">Last 6 months</option>
+        </select>
       </div>
       <div id="bursts-list" style="max-height: 640px; overflow-y: auto; padding-right: 6px;">
         <div class="empty-state">Loading…</div>
@@ -2171,6 +2178,7 @@ document.querySelectorAll('#author-conc-controls [data-conc-sort]').forEach(btn 
 // ---------------------------------------------------------------------
 let burstsByParent = null;
 let burstRankMode = 'fixed';
+let burstsWindow = 'all';
 let expandedBurstChannels = new Set();
 
 function groupBursts(rows) {
@@ -2210,7 +2218,34 @@ function renderBursts() {
     return;
   }
 
-  const groups = groupBursts(burstsByParent);
+  let groups = groupBursts(burstsByParent);
+
+  if (burstsWindow !== 'all') {
+    const windowEnd = getOverallMostRecentDate();
+    if (!windowEnd) {
+      container.innerHTML = '<div class="empty-state">No activity in the selected window.</div>';
+      return;
+    }
+    const windowStart = new Date(windowEnd);
+    windowStart.setUTCMonth(windowStart.getUTCMonth() - parseInt(burstsWindow, 10));
+
+    const filteredGroups = {};
+    Object.keys(groups).forEach(ch => {
+      const overlapping = groups[ch].filter(b => {
+        const s = new Date(b.start);
+        const e = new Date(b.end);
+        return s <= windowEnd && e >= windowStart;
+      });
+      if (overlapping.length > 0) filteredGroups[ch] = overlapping.slice(0, 5);
+    });
+    groups = filteredGroups;
+  }
+
+  if (Object.keys(groups).length === 0) {
+    container.innerHTML = '<div class="empty-state">No bursts overlap the selected window.</div>';
+    return;
+  }
+
   const metricKey = burstRankMode === 'fixed' ? 'messageCount' : 'spikeRatio';
 
   // Re-sort each channel's own bursts by the active metric, so the
@@ -2277,6 +2312,10 @@ document.querySelectorAll('#bursts-controls [data-burst-rank]').forEach(btn => {
     burstRankMode = btn.dataset.burstRank;
     renderBursts();
   });
+});
+document.getElementById('bursts-window-select')?.addEventListener('change', (e) => {
+  burstsWindow = e.target.value;
+  renderBursts();
 });
 
 // ---------------------------------------------------------------------
