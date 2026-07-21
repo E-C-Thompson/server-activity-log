@@ -698,11 +698,22 @@
         very different stories -- one a broad discussion, the other really
         just 1-2 people generating most of the volume. Shares are not tied
         to who the posters are, just how concentrated the activity is.
+        Narrowing the Window helps surface channels that only look varied
+        because of years of accumulated history from long-time members --
+        the all-time number can look healthy while recent activity is
+        actually concentrated in just one or two people.
       </p>
       <div class="controls" id="author-conc-controls" style="align-items:center;">
         <button class="tab-btn gran-btn" data-conc-metric="messages_per_author" style="padding:6px 14px; font-size:0.7rem;">Messages / Author</button>
         <button class="tab-btn gran-btn active" data-conc-metric="top1_share_pct" style="padding:6px 14px; font-size:0.7rem;">Top 1 Share</button>
         <button class="tab-btn gran-btn" data-conc-metric="top3_share_pct" style="padding:6px 14px; font-size:0.7rem;">Top 3 Share</button>
+        <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Window:</span>
+        <select id="author-conc-window-select" style="background:#120e0b; border:1px solid var(--border); color:var(--text); border-radius:3px; padding:6px 8px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem;">
+          <option value="all" selected>All time</option>
+          <option value="24">Last 2 years</option>
+          <option value="12">Last year</option>
+          <option value="6">Last 6 months</option>
+        </select>
         <span style="color: var(--text-muted); font-size: 0.78rem; margin-left: 12px;">Show:</span>
         <button class="tab-btn gran-btn active" data-conc-sort="desc" style="padding:6px 14px; font-size:0.7rem;">Most concentrated</button>
         <button class="tab-btn gran-btn" data-conc-sort="asc" style="padding:6px 14px; font-size:0.7rem;">Most varied</button>
@@ -1780,6 +1791,7 @@ async function loadHeatmaps() {
   overallGapByParent = await fetchCSV('data/channel_stats_gap_overall_by_parent.csv');
   biggestGapsByParent = await fetchCSV('data/channel_stats_biggest_gaps_by_parent.csv');
   authorConcentrationByParent = await fetchCSV('data/channel_stats_author_concentration_by_parent.csv');
+  authorMonthByParent = await fetchCSV('data/channel_stats_author_month_by_parent.csv');
   renderDensityHeatmap();
   renderGapHeatmap();
   renderGapRateChart();
@@ -1997,11 +2009,55 @@ document.querySelectorAll('#biggest-gaps-controls [data-gaps-sort]').forEach(btn
 // channel's volume comes from its top 1 / top 3 posters.
 // ---------------------------------------------------------------------
 let authorConcentrationByParent = null;
-let authorConcState = { metric: 'top1_share_pct', sortDir: 'desc' };
+let authorMonthByParent = null;
+let authorConcState = { metric: 'top1_share_pct', sortDir: 'desc', window: 'all' };
 
 function fmtConcMetric(metric, value) {
   if (metric === 'messages_per_author') return value.toFixed(1) + ' msgs/author';
   return value.toFixed(1) + '%';
+}
+
+// Recompute concentration from the granular per-author-per-month file,
+// restricted to months overlapping the selected window. Returns the same
+// row shape as the all-time file so the render step doesn't need to care
+// which source it came from.
+function computeWindowedConcentration(monthRows, windowMonths) {
+  const overallMostRecent = getOverallMostRecentDate();
+  if (!overallMostRecent) return [];
+
+  const windowEnd = overallMostRecent;
+  const windowStart = new Date(windowEnd);
+  windowStart.setUTCMonth(windowStart.getUTCMonth() - parseInt(windowMonths, 10));
+  const fromYm = windowStart.toISOString().slice(0, 7);
+  const toYm = windowEnd.toISOString().slice(0, 7);
+
+  const filtered = monthRows.filter(r => r.year_month >= fromYm && r.year_month <= toYm);
+
+  // parent -> {author_id -> count}
+  const byParent = {};
+  filtered.forEach(r => {
+    if (!byParent[r.parent_channel]) byParent[r.parent_channel] = {};
+    const authorMap = byParent[r.parent_channel];
+    authorMap[r.author_id] = (authorMap[r.author_id] || 0) + Number(r.message_count);
+  });
+
+  return Object.keys(byParent).map(parent => {
+    const counts = Object.values(byParent[parent]);
+    const total = counts.reduce((a, b) => a + b, 0);
+    const uniqueAuthors = counts.length;
+    const messagesPerAuthor = uniqueAuthors ? total / uniqueAuthors : 0;
+    const sortedCounts = [...counts].sort((a, b) => b - a);
+    const top1 = sortedCounts[0] || 0;
+    const top3 = sortedCounts.slice(0, 3).reduce((a, b) => a + b, 0);
+    return {
+      parent_channel: parent,
+      total_messages: total,
+      unique_authors: uniqueAuthors,
+      messages_per_author: messagesPerAuthor,
+      top1_share_pct: total ? (top1 / total * 100) : 0,
+      top3_share_pct: total ? (top3 / total * 100) : 0,
+    };
+  });
 }
 
 function renderAuthorConcentration() {
@@ -2017,10 +2073,30 @@ function renderAuthorConcentration() {
     return;
   }
 
+  let sourceRows = authorConcentrationByParent;
+  if (authorConcState.window !== 'all') {
+    if (!authorMonthByParent) {
+      container.innerHTML = `
+        <div class="empty-state">
+          No <code>channel_stats_author_month_by_parent.csv</code> found yet
+          -- needed for time-windowed views.<br><br>
+          Run <code>build_parent_timeseries.py</code> and drop the
+          resulting file into <code>/data</code>, or switch back to All time.
+        </div>`;
+      return;
+    }
+    sourceRows = computeWindowedConcentration(authorMonthByParent, authorConcState.window);
+  }
+
+  if (sourceRows.length === 0) {
+    container.innerHTML = '<div class="empty-state">No activity in the selected window.</div>';
+    return;
+  }
+
   const metric = authorConcState.metric;
   const sortMult = authorConcState.sortDir === 'asc' ? -1 : 1;
 
-  const rows = authorConcentrationByParent.map(r => ({
+  const rows = sourceRows.map(r => ({
     name: '#' + r.parent_channel,
     value: Number(r[metric]),
     uniqueAuthors: Number(r.unique_authors),
@@ -2050,6 +2126,10 @@ document.querySelectorAll('#author-conc-controls [data-conc-metric]').forEach(bt
     authorConcState.metric = btn.dataset.concMetric;
     renderAuthorConcentration();
   });
+});
+document.getElementById('author-conc-window-select')?.addEventListener('change', (e) => {
+  authorConcState.window = e.target.value;
+  renderAuthorConcentration();
 });
 document.querySelectorAll('#author-conc-controls [data-conc-sort]').forEach(btn => {
   btn.addEventListener('click', () => {
